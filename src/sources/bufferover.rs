@@ -37,11 +37,10 @@ pub async fn run_all(hosts: Vec<&str>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_await_test::async_test;
 
-    #[async_test]
-    async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
-        assert!(results.len() > 10);
+    #[test]
+    fn url_builder() {
+        let correct_uri = "http://dns.bufferover.run/dns?q=hackerone.com";
+        assert_eq!(correct_uri, build_url("hackerone.com"));
     }
 }
