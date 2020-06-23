@@ -12,10 +12,10 @@ struct CrtshResult {
 pub async fn run(host: &str) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(host);
-    let resp: HashSet<CrtshResult> = surf::get(uri).recv_json().await?;
+    let resp: Vec<CrtshResult> = surf::get(uri).recv_json().await?;
     resp.into_iter()
         .map(|s| results.insert(s.name_value))
-        .collect::<Vec<_>>();
+        .for_each(drop);
 
     Ok(results)
 }
