@@ -1,20 +1,21 @@
-use async_std::{prelude::*, task};
 use serde::Deserialize;
 use std::collections::HashSet;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Deserialize)]
 struct Subdomain {
     id: String,
 }
 
-#[derive(Deserialize, Hash, PartialEq, Eq)]
+#[derive(Deserialize)]
 struct VirustotalResult {
-    data: Vec<Subdomain>,
+    data: Option<Vec<Subdomain>>,
 }
 
 fn build_url(host: &str) -> String {
+    // TODO: can we gather the subdomains using:
+    // https://www.virustotal.com/vtapi/v2/domain/report
     format!(
         "https://www.virustotal.com/ui/domains/{}/subdomains?limit=40",
         host
@@ -24,13 +25,17 @@ fn build_url(host: &str) -> String {
 pub async fn run(host: &str) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(host);
-    //TODO: add error handling on response. We want to handle errors gracefully, not panic on
-    // deserializing empty json body.
     let resp: VirustotalResult = surf::get(uri).recv_json().await?;
-    resp.data
-        .into_iter()
-        .map(|s| results.insert(s.id))
-        .for_each(drop);
+
+    match resp.data {
+        Some(data) => data
+            .into_iter()
+            .map(|s| results.insert(s.id))
+            .for_each(drop),
+
+        None => eprintln!("VirusTotal couldn't find results for: {}", &host),
+    }
+
     Ok(results)
 }
 
@@ -40,10 +45,20 @@ mod tests {
     use futures_await_test::async_test;
 
     // Checks to see if the run function returns subdomains
+    // IGNORE by default since we have limited api calls.
     #[async_test]
-    async fn vt_returns_results() {
+    #[ignore]
+    async fn returns_results() {
         let host = "hackerone.com";
         let results = run(host).await.unwrap();
         assert!(results.len() > 5);
+    }
+
+    #[async_test]
+    #[ignore]
+    async fn handle_no_results() {
+        let host = "hdsad.com";
+        let results = run(host).await.unwrap();
+        assert!(results.len() < 1);
     }
 }

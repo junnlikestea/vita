@@ -1,4 +1,3 @@
-use async_std::{prelude::*, task};
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -9,28 +8,48 @@ struct CrtshResult {
     name_value: String,
 }
 
+fn build_url(host: &str) -> String {
+    format!("https://crt.sh/?q=%.{}&output=json", host)
+}
+
 pub async fn run(host: &str) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(host);
-    let resp: Vec<CrtshResult> = surf::get(uri).recv_json().await?;
-    resp.into_iter()
-        .map(|s| results.insert(s.name_value))
-        .for_each(drop);
+    let resp: Option<Vec<CrtshResult>> = surf::get(uri).recv_json().await?;
+
+    match resp {
+        Some(data) => data
+            .into_iter()
+            .map(|s| results.insert(s.name_value))
+            .for_each(drop),
+        None => eprintln!("Crtsh couldn't find results for:{}", &host),
+    }
 
     Ok(results)
-}
-
-fn build_url(host: &str) -> String {
-    format!("https://crt.sh/?q=%.{}&output=json", host)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_await_test::async_test;
 
     #[test]
     fn url_builder() {
         let correct_uri = "https://crt.sh/?q=%.hackerone.com&output=json";
         assert_eq!(correct_uri, build_url("hackerone.com"));
+    }
+
+    #[async_test]
+    async fn returns_results() {
+        let host = "hackerone.com";
+        let results = run(host).await.unwrap();
+        assert!(results.len() > 5);
+    }
+
+    #[async_test]
+    async fn handle_no_results() {
+        let host = "hdsad.com";
+        let results = run(host).await.unwrap();
+        assert!(results.len() < 1);
     }
 }

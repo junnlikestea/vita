@@ -1,10 +1,13 @@
 use async_std::prelude::*;
 extern crate vita;
 use self::vita::*;
-use sources::certspotter;
+use sources::hackertarget::run;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let bufferover = certspotter::run("hackerone.com").await?;
+    let bufferover = run("anVubmxpa2V0ZWE.com").await?;
+    for r in bufferover {
+        println!("{}", r);
+    }
     Ok(())
 }

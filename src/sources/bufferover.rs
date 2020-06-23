@@ -1,4 +1,3 @@
-use async_std::{prelude::*, task};
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -7,7 +6,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 #[derive(Deserialize)]
 struct BufferOverResult {
     #[serde(rename = "FDNS_A")]
-    subdomains: Vec<String>,
+    subdomains: Option<Vec<String>>,
 }
 
 fn build_url(host: &str) -> String {
@@ -20,10 +19,14 @@ pub async fn run(host: &str) -> Result<HashSet<String>> {
     let mut results = HashSet::new();
     let BufferOverResult { subdomains } = surf::get(uri).recv_json().await?;
 
-    // do we need to user into_iter here? since we want to take ownerships of s anyway
-    for s in subdomains.into_iter() {
-        let sub = s.split(",").collect::<Vec<&str>>()[1].to_owned();
-        results.insert(sub);
+    match subdomains {
+        Some(data) => {
+            data.into_iter()
+                .map(|s| results.insert(s.split(",").collect::<Vec<&str>>()[1].to_owned()))
+                .for_each(drop);
+        }
+
+        None => println!("Bufferover couldn't find results for:{}", &host),
     }
 
     Ok(results)
@@ -37,10 +40,18 @@ pub async fn run_all(hosts: Vec<&str>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_await_test::async_test;
 
     #[test]
     fn url_builder() {
         let correct_uri = "http://dns.bufferover.run/dns?q=hackerone.com";
         assert_eq!(correct_uri, build_url("hackerone.com"));
+    }
+
+    #[async_test]
+    async fn handle_no_results() {
+        let host = "ASuperInvalidDomain.net.com";
+        let results = run(host).await.unwrap();
+        assert!(results.len() < 1);
     }
 }
