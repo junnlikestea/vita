@@ -5,5 +5,6 @@ pub mod facebook;
 pub mod hackertarget;
 pub mod spyse;
 pub mod threatcrowd;
+pub mod threatminer;
 pub mod urlscan;
 pub mod virustotal;
