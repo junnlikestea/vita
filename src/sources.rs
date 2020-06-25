@@ -8,3 +8,4 @@ pub mod threatcrowd;
 pub mod threatminer;
 pub mod urlscan;
 pub mod virustotal;
+pub mod wayback;
