@@ -1,6 +1,7 @@
 pub mod bufferover;
 pub mod certspotter;
 pub mod crtsh;
+pub mod facebook;
 pub mod hackertarget;
 pub mod spyse;
 pub mod threatcrowd;
