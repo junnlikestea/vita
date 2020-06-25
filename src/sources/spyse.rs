@@ -31,6 +31,8 @@ fn build_url(host: &str) -> String {
 pub async fn run(host: &str) -> Result<HashSet<String>> {
     // should this process be done with lazy_static macro? otherwise we would be
     // creatng this for every call to run
+    //
+    // TODO:// handle pagnation?
     dotenv().ok();
     let api_token = env::var("SPYSE_TOKEN")
         .expect("SPYSE_TOKEN must be set in order to use Spyse as a data source");

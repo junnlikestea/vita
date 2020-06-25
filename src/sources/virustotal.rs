@@ -15,6 +15,7 @@ struct VirustotalResult {
 
 fn build_url(host: &str) -> String {
     // TODO: can we gather the subdomains using:
+    // Handle pagenation
     // https://www.virustotal.com/vtapi/v2/domain/report
     format!(
         "https://www.virustotal.com/ui/domains/{}/subdomains?limit=40",
