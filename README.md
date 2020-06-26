@@ -1,4 +1,5 @@
-# Vita - A tool to find subdomains or domains from passive sources
+# Vita
+A tool to find subdomains or domains from passive sources.
 
 ### Installation
 I'll have some binaries uploaded for different platforms in the next few days, if you want to go ahead and install
