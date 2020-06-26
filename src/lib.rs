@@ -47,6 +47,7 @@ async fn all_sources(host: String) -> HashSet<String> {
         Box::pin(virustotal::run(host.to_owned())),
         Box::pin(threatminer::run(host.to_owned())),
         Box::pin(sublister::run(host.to_owned())),
+        Box::pin(wayback::run(host.to_owned())),
         Box::pin(facebook::run(host.to_owned())),
         Box::pin(spyse::run(host.to_owned())),
         Box::pin(hackertarget::run(host)),
@@ -57,7 +58,7 @@ async fn all_sources(host: String) -> HashSet<String> {
     }
 
     let res = join_all(tasks).await;
-    res.into_iter().flatten().flatten().collect()
+    res.into_iter().flat_map(|v| v).flatten().collect()
 }
 
 // Takes a bunch of hosts and collects data on them
