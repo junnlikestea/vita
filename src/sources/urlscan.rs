@@ -23,8 +23,8 @@ fn build_url(host: &str) -> String {
     format!("https://urlscan.io/api/v1/search/?q=domain:{}", host)
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
-    let uri = build_url(host);
+pub async fn run(host: String) -> Result<HashSet<String>> {
+    let uri = build_url(&host);
     let mut subdomains = HashSet::new();
     let resp: Option<UrlScanResult> = surf::get(uri).recv_json().await?;
     // why loop through twice? and create two maps, we could just use collect on a successful
@@ -54,14 +54,14 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com";
+        let host = "anVubmxpa2VzdGVh.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }
 
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 3);
     }
 }

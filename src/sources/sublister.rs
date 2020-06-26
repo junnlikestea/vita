@@ -7,9 +7,9 @@ fn build_url(host: &str) -> String {
     format!("https://api.sublist3r.com/search.php?domain={}", host)
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     let mut results = HashSet::new();
-    let uri = build_url(host);
+    let uri = build_url(&host);
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
     //TODO: isn't there a more efficient way to do this (complexity wise)
     // not just this source, but multiple sources have unecessary loops.
@@ -40,13 +40,13 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 0);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "hdsad.com";
+        let host = "hdsad.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() == 0);
     }

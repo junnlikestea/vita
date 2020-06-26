@@ -22,9 +22,9 @@ fn parse_result(result: Value, map: &mut HashSet<String>) {
     }
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     let mut results = HashSet::new();
-    let uri = build_url(host);
+    let uri = build_url(&host);
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
     match resp {
         Some(d) => parse_result(d, &mut results),
@@ -50,7 +50,7 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 0);
     }
 }

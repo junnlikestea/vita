@@ -28,7 +28,7 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     // should this process be done with lazy_static macro? otherwise we would be
     // creatng this for every call to run
     //
@@ -36,7 +36,7 @@ pub async fn run(host: &str) -> Result<HashSet<String>> {
     dotenv().ok();
     let api_token = env::var("SPYSE_TOKEN")
         .expect("SPYSE_TOKEN must be set in order to use Spyse as a data source");
-    let uri = build_url(host);
+    let uri = build_url(&host);
     let mut subdomains = HashSet::new();
     let resp: Option<SpyseResult> = surf::get(uri)
         .set_header(headers::ACCEPT, "application/json")
@@ -72,13 +72,13 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 3);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com";
+        let host = "anVubmxpa2VzdGVh.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

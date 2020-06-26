@@ -18,12 +18,12 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     dotenv().ok();
     let api_key = env::var("SECURITY_TRAILS_KEY")
         .expect("SECURITY_TRAILS_KEY must be set to use Security Trails API");
     let mut results = HashSet::new();
-    let uri = build_url(host);
+    let uri = build_url(&host);
     let resp: Option<SecTrailsResult> = surf::get(uri)
         .set_header("apikey", api_key)
         .recv_json()
@@ -58,14 +58,14 @@ mod tests {
     #[ignore]
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 0);
     }
 
     #[ignore]
     #[async_test]
     async fn handle_no_results() {
-        let host = "hdsad.com";
+        let host = "hdsad.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() == 0);
     }

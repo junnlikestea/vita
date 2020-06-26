@@ -15,9 +15,9 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
-    let uri = build_url(host);
+    let uri = build_url(&host);
     let resp: ThreatCrowdResult = surf::get(uri).recv_json().await?;
 
     match resp.subdomains {
@@ -36,13 +36,13 @@ mod tests {
 
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 5);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let results = run("anVubmxpa2VzdGVh.com").await.unwrap();
+        let results = run("anVubmxpa2VzdGVh.com".to_owned()).await.unwrap();
         assert!(results.len() < 1);
     }
 }

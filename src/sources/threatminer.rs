@@ -18,8 +18,8 @@ pub fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
-    let uri = build_url(host);
+pub async fn run(host: String) -> Result<HashSet<String>> {
+    let uri = build_url(&host);
     let mut results = HashSet::new();
     let resp: Option<ThreatminerResult> = surf::get(uri).recv_json().await?;
     match resp {
@@ -48,13 +48,13 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 0);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "hdsad.com";
+        let host = "hdsad.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() == 0);
     }

@@ -12,9 +12,9 @@ fn build_url(host: &str) -> String {
     format!("https://crt.sh/?q=%.{}&output=json", host)
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
-    let uri = build_url(host);
+    let uri = build_url(&host);
     let resp: Option<Vec<CrtshResult>> = surf::get(uri).recv_json().await?;
 
     match resp {
@@ -41,14 +41,14 @@ mod tests {
 
     #[async_test]
     async fn returns_results() {
-        let host = "hackerone.com";
+        let host = "hackerone.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() > 5);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com";
+        let host = "anVubmxpa2VzdGVh.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

@@ -14,8 +14,8 @@ fn build_url(host: &str) -> String {
 }
 
 // query the api returns unique results
-pub async fn run(host: &str) -> Result<HashSet<String>> {
-    let uri = build_url(host);
+pub async fn run(host: String) -> Result<HashSet<String>> {
+    let uri = build_url(&host);
     let mut results = HashSet::new();
     let BufferOverResult { subdomains } = surf::get(uri).recv_json().await?;
 
@@ -50,7 +50,7 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com";
+        let host = "anVubmxpa2VzdGVh.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

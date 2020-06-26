@@ -81,10 +81,10 @@ fn build_url(host: &str, token: &str) -> String {
     )
 }
 
-pub async fn run(host: &str) -> Result<HashSet<String>> {
+pub async fn run(host: String) -> Result<HashSet<String>> {
     let mut res: HashSet<String> = HashSet::new();
     let access_token = Credentials::from_env().authenticate().await?;
-    let uri = build_url(host, &access_token);
+    let uri = build_url(&host, &access_token);
     let resp: Option<FacebookResult> = surf::get(uri).recv_json().await?;
 
     match resp {
@@ -125,7 +125,7 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com").await.unwrap();
+        let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 3);
     }
 
@@ -133,7 +133,7 @@ mod tests {
     // when the source doesn't have any data.
     #[async_test]
     async fn handle_no_results() {
-        let host = "hdsad.com";
+        let host = "anVubmxpa2VzdGVh.com".to_owned();
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }
