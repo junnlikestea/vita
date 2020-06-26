@@ -115,9 +115,9 @@ mod tests {
         assert_eq!(creds, Credentials::from_env());
     }
 
-    // Checks if we can retrieve an access_token
+    // Checks if we can authenticate with Facebook.
     #[async_test]
-    async fn get_accesstoken() {
+    async fn auth() {
         let token = Credentials::from_env().authenticate().await.unwrap();
         assert!(token.len() > 1);
     }
