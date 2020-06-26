@@ -1,5 +1,4 @@
 use dotenv::dotenv;
-use http_types::headers;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;

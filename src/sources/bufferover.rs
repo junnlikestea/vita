@@ -32,11 +32,6 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     Ok(results)
 }
 
-// query the api for multiple hosts at a time.
-pub async fn run_all(hosts: Vec<&str>) -> Result<HashSet<String>> {
-    unimplemented!()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

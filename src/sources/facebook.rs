@@ -1,7 +1,5 @@
 use dotenv::dotenv;
-use http_types::headers;
 use serde::Deserialize;
-use serde_json::Value;
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
