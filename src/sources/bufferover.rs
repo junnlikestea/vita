@@ -50,7 +50,7 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "ASuperInvalidDomain.net.com";
+        let host = "anVubmxpa2VzdGVh.com";
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

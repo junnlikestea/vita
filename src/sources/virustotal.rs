@@ -58,7 +58,7 @@ mod tests {
     #[async_test]
     #[ignore]
     async fn handle_no_results() {
-        let host = "hdsad.com";
+        let host = "anVubmxpa2VzdGVh.com";
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

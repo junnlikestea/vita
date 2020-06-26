@@ -42,7 +42,7 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let results = run("AVeryInvalidDomainjun237283713.com").await.unwrap();
+        let results = run("anVubmxpa2VzdGVh.com").await.unwrap();
         assert!(results.len() < 1);
     }
 }
