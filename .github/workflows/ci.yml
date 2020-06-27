@@ -10,7 +10,6 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - 1.36.0  # MSRV
         arch:
           - i686-unknown-linux-gnu
           - x86_64-unknown-linux-gnu
@@ -55,7 +54,6 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - 1.36.0  # MSRV
         arch:
           - i686-pc-windows-msvc
           - x86_64-pc-windows-msvc
@@ -96,7 +94,6 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - 1.36.0  # MSRV
         arch:
           - x86_64-apple-darwin
     steps:
