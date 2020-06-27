@@ -1,8 +1,8 @@
 # Vita
-A tool to find subdomains or domains from passive sources.
+![release](https://github.com/junnlikestea/vita/workflows/release/badge.svg)
 
 ### Installation
-I'll have some binaries uploaded for different platforms in the next few days, if you want to go ahead and install
+Precompiled binaries for vita are available in the [releases](https://github.com/junnlikestea/vita/releases) tab. Just pick your platform and extract the archive that contains the binary.
 
 ## Building it yourself 
 If you want to build it yourself you will need to install Rust, you can get the [official installation](https://www.rust-lang.org/tools/install) from the Rust website.
@@ -21,12 +21,12 @@ With a single domain, and collect data from Apis' which don't require keys.:
 vita -d hackerone.com
 ```
 
-With a list of domains from a file
+With a list of domains from a file:
 ```
 vita -f path/to/domains.txt
 ```
 
-With a list of domains from stdin
+With a list of domains from stdin:
 ```
 vita < /path/to/domains.txt
 ```
