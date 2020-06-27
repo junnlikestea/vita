@@ -16,7 +16,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
         Some(d) => d
             .as_array()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|s| results.insert(s.as_str().unwrap().into()))
             .for_each(drop),
         None => eprintln!("AnubisDB couldn't find any results for: {}", &host),

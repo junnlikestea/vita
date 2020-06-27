@@ -13,7 +13,7 @@ fn build_url(host: &str) -> String {
 
 fn parse_result(result: Value, map: &mut HashSet<String>) {
     let arr = result.as_array().unwrap();
-    let vecs: Vec<&str> = arr.into_iter().map(|s| s[0].as_str().unwrap()).collect();
+    let vecs: Vec<&str> = arr.iter().map(|s| s[0].as_str().unwrap()).collect();
     for v in vecs.into_iter() {
         match Url::parse(v) {
             Ok(u) => map.insert(u.host_str().unwrap_or("").into()),

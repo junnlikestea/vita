@@ -1,5 +1,4 @@
 extern crate vita;
-use self::vita::*;
 use clap::{App, Arg};
 use regex::Regex;
 use std::fs;
@@ -39,7 +38,7 @@ async fn main() -> Result<()> {
 
 fn create_clap_app(version: &str) -> clap::App {
     // Add support to not include subdomains.
-    let app = App::new("vita")
+    App::new("vita")
         .version(version)
         .about("Gather subdomains from passive sources")
         .usage("vita <domain.com>")
@@ -61,9 +60,7 @@ fn create_clap_app(version: &str) -> clap::App {
                 .help("use sources which require an Api key")
                 .short("a")
                 .long("all"),
-        );
-
-    app
+        )
 }
 
 fn read_stdin() -> Result<Vec<String>> {
@@ -78,13 +75,13 @@ fn read_stdin() -> Result<Vec<String>> {
 
 // instead of returning the match, we could just return a bool if it matches.
 // fine for 1 host but what about many?
-fn is_relevant(reg: &Vec<Regex>, target: &str) -> bool {
-    for re in reg.into_iter() {
+fn is_relevant(reg: &[Regex], target: &str) -> bool {
+    for re in reg.iter() {
         if re.is_match(target) {
             return true;
         };
     }
-    return false;
+    false
 }
 
 // builds a regex that filters junk results

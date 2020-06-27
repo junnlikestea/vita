@@ -21,9 +21,6 @@ jobs:
           target: ${{ matrix.arch }}
           override: true
 
-      - name: Install openssl
-        run: sudo apt-get install libssl-dev
-
       - name: Build
         uses: actions-rs/cargo@v1
         with:
@@ -36,7 +33,7 @@ jobs:
         with:
           use-cross: true
           command: test
-          args: --target ${{ matrix.arch }}
+         args: --target ${{ matrix.arch }}
 
       - name: Run clippy
         if: matrix.toolchain == 'stable'

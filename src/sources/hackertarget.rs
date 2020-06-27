@@ -17,7 +17,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
         match Some(resp) {
             Some(data) => data
                 .lines()
-                .map(|s| results.insert(s.split(",").collect::<Vec<&str>>()[0].to_owned()))
+                .map(|s| results.insert(s.split(',').collect::<Vec<&str>>()[0].to_owned()))
                 .for_each(drop),
             None => eprintln!("HackerTarget, couldn't find results for:{}", &host),
         }

@@ -16,7 +16,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     match resp {
         Some(d) => {
             let arr = d.as_array().unwrap();
-            arr.into_iter()
+            arr.iter()
                 .map(|s| results.insert(s.as_str().unwrap().into()))
                 .for_each(drop);
         }

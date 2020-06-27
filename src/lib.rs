@@ -31,7 +31,7 @@ async fn free_sources(host: String) -> HashSet<String> {
     }
 
     let res = join_all(tasks).await;
-    res.into_iter().flat_map(|v| v).flatten().collect()
+    res.into_iter().flatten().flatten().collect()
 }
 
 // Collects data from all sources
@@ -58,7 +58,7 @@ async fn all_sources(host: String) -> HashSet<String> {
     }
 
     let res = join_all(tasks).await;
-    res.into_iter().flat_map(|v| v).flatten().collect()
+    res.into_iter().flatten().flatten().collect()
 }
 
 // Takes a bunch of hosts and collects data on them

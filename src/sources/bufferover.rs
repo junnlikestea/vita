@@ -22,7 +22,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     match subdomains {
         Some(data) => {
             data.into_iter()
-                .map(|s| results.insert(s.split(",").collect::<Vec<&str>>()[1].to_owned()))
+                .map(|s| results.insert(s.split(',').collect::<Vec<&str>>()[1].to_owned()))
                 .for_each(drop);
         }
 
