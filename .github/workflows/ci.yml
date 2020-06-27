@@ -22,7 +22,7 @@ jobs:
           target: ${{ matrix.arch }}
           override: true
 
-      - name: Install openssl:
+      - name: Install openssl
         if: matrix.arch == "x86_64-unknown-linux-gnu"
         run: sudo apt-get install libssl-dev
 
