@@ -55,7 +55,7 @@ impl Credentials {
         let resp: Option<AuthResp> = surf::get(auth_url).recv_json().await?;
 
         if let Some(r) = resp {
-            return Ok(r.access_token);
+            Ok(r.access_token)
         } else {
             Err(FacebookAuthError.into())
         }

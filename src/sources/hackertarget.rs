@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 // this is replicated in manyt places
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-const API_ERROR: &'static str = "error check your search parameter";
+const API_ERROR: &str = "error check your search parameter";
 
 fn build_url(host: &str) -> String {
     format!("https://api.hackertarget.com/hostsearch/?q={}", host)
