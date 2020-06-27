@@ -33,7 +33,7 @@ jobs:
         with:
           use-cross: true
           command: test
-         args: --target ${{ matrix.arch }}
+          args: --target ${{ matrix.arch }}
 
       - name: Run clippy
         if: matrix.toolchain == 'stable'
