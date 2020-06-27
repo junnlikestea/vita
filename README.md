@@ -1,5 +1,6 @@
 # Vita
-![release](https://github.com/junnlikestea/vita/workflows/release/badge.svg)![Continuous integration](https://github.com/junnlikestea/vita/workflows/Continuous%20integration/badge.svg)
+![release](https://github.com/junnlikestea/vita/workflows/release/badge.svg)
+[![Build status](https://github.com/junnlikestea/vita/workflows/Continuous%20integration/badge.svg)](https://github.com/junnlikestea/vita/actions)
 
 ### Installation
 Precompiled binaries for vita are available in the [releases](https://github.com/junnlikestea/vita/releases) tab. Just pick your platform and extract the archive that contains the binary.
