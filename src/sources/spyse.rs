@@ -70,12 +70,14 @@ mod tests {
     }
 
     // Checks to see if the run function returns subdomains
+    #[ignore]
     #[async_test]
     async fn returns_results() {
         let results = run("hackerone.com".to_owned()).await.unwrap();
         assert!(results.len() > 3);
     }
 
+    #[ignore]
     #[async_test]
     async fn handle_no_results() {
         let host = "anVubmxpa2VzdGVh.com".to_owned();

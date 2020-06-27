@@ -104,6 +104,7 @@ mod tests {
     use futures_await_test::async_test;
 
     // checks if we can fetch the credentials from an .env file.
+    #[ignore]
     #[test]
     fn get_creds() {
         dotenv().ok();
@@ -115,12 +116,14 @@ mod tests {
 
     // Checks if we can authenticate with Facebook.
     #[async_test]
+    #[ignore]
     async fn auth() {
         let token = Credentials::from_env().authenticate().await.unwrap();
         assert!(token.len() > 1);
     }
 
     // Checks to see if the run function returns subdomains
+    #[ignore]
     #[async_test]
     async fn returns_results() {
         let results = run("hackerone.com".to_owned()).await.unwrap();
@@ -129,6 +132,8 @@ mod tests {
 
     // we don't care about panicing or anything, since we just want to return a blank result
     // when the source doesn't have any data.
+    //
+    #[ignore]
     #[async_test]
     async fn handle_no_results() {
         let host = "anVubmxpa2VzdGVh.com".to_owned();
