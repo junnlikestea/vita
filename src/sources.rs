@@ -1,5 +1,6 @@
 pub mod alienvault;
 pub mod anubisdb;
+pub mod binaryedge;
 pub mod bufferover;
 pub mod certspotter;
 pub mod crtsh;

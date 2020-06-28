@@ -6,7 +6,7 @@ use url::Url;
 fn build_url(host: &str) -> String {
     format!(
         "https://web.archive.org/cdx/search/cdx?url=*.{}/*&output=json\
-    &fl=original&collapse=urlkey&limit=100000&_=1547318148315",
+    &fl=original&collapse=urlkey&limit=100000",
         host
     )
 }
@@ -43,7 +43,7 @@ mod tests {
     fn url_builder() {
         let correct_uri =
             "https://web.archive.org/cdx/search/cdx?url=*.hackerone.com/*&output=json\
-    &fl=original&collapse=urlkey&limit=100000&_=1547318148315";
+    &fl=original&collapse=urlkey&limit=100000";
         assert_eq!(correct_uri, build_url("hackerone.com"));
     }
 
