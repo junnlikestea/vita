@@ -1,11 +1,10 @@
+use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fmt;
-
-type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
 // Error for case when api authentication fails
 #[derive(Debug)]

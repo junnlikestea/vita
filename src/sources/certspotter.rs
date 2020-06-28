@@ -1,8 +1,6 @@
+use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
-
-// this is replicated in manyt places
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Deserialize)]
 struct CertSpotterResult {

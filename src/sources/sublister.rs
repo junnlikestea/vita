@@ -1,7 +1,6 @@
+use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 fn build_url(host: &str) -> String {
     format!("https://api.sublist3r.com/search.php?domain={}", host)

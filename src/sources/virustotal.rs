@@ -1,7 +1,6 @@
+use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Deserialize)]
 struct Subdomain {

@@ -1,9 +1,8 @@
+use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Deserialize)]
 struct SecTrailsResult {

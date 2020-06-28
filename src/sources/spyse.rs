@@ -1,10 +1,9 @@
+use crate::Result;
 use dotenv::dotenv;
 use http_types::headers;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
-// this is replicated in manyt places
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Deserialize)]
 struct SpyseResult {
