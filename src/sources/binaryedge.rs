@@ -29,7 +29,7 @@ impl ResponseData for BinaryEdgeResponse {
 
 impl ResponseData for Vec<BinaryEdgeResponse> {
     fn subdomains(&self, map: &mut HashSet<String>) {
-        self.into_iter()
+        self.iter()
             .flat_map(|b| b.events.iter())
             .map(|s| map.insert(s.into()))
             .for_each(drop);
@@ -61,15 +61,15 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
 
     loop {
         let host = host.clone();
+
         if page > 0 && page * resp.pagesize >= resp.total {
             break;
         }
 
         page += 1;
-
-        tasks.push(task::spawn(async move {
-            next_page(&host, Some(page.into())).await
-        }));
+        tasks.push(task::spawn(
+            async move { next_page(&host, Some(page)).await },
+        ));
     }
 
     join_all(tasks)

@@ -39,6 +39,8 @@ vita -d hackerone.com -a
 
 ### Sources
 * AnubisDB
+* Alienvault
+* Binaryedge - be careful running this on a large host if you have a free license. Vita fetches every page of results.
 * Certspotter
 * Crt.sh
 * Hackertarget
@@ -55,6 +57,8 @@ vita -d hackerone.com -a
 
 ### How to set your Api Keys
 Add a `.env` file to the directory, and set the following variables:
+* Binaryedge:
+	* Needs `BINARYEDGE_TOKEN` set
 * Facebook:
 	* Needs `FB_APP_ID` and `FB_APP_SECRET` set.
 * Spyse:
@@ -64,5 +68,14 @@ Add a `.env` file to the directory, and set the following variables:
 
 If you hit rate limits or authentication fails, you will get a message in `stderror`, this will not
 be printed in the final output.
+### To-do
+* Add more paid sources.
+* Clean up some data stuctures and methods.
+* Optimise performance further.
+### Disclaimer
+Developers have/has no responsibility or authority over any kind of:
+* Legal or Law infringement by third parties and users.
+* Malicious use capable of causing damage to third parties.
+* Illegal or unlawful use of vita.
 
 Thanks to [0xatul](https://twitter.com/atul_hax) for the feedback!
