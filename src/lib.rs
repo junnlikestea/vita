@@ -10,6 +10,10 @@ use std::collections::HashSet;
 // wrapper result type
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+trait ResponseData {
+    fn subdomains(&self, map: &mut HashSet<String>);
+}
+
 // Collects data from all sources which don't require and API key
 async fn free_sources(host: String) -> HashSet<String> {
     let mut tasks = Vec::new();

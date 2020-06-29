@@ -1,6 +1,17 @@
+use crate::ResponseData;
 use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
+
+impl ResponseData for Value {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.as_array()
+            .unwrap()
+            .iter()
+            .map(|s| map.insert(s.as_str().unwrap().into()))
+            .for_each(drop);
+    }
+}
 
 fn build_url(host: &str) -> String {
     format!("https://jldc.me/anubis/subdomains/{}", host)
@@ -12,12 +23,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(d) => d
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|s| results.insert(s.as_str().unwrap().into()))
-            .for_each(drop),
+        Some(d) => d.subdomains(&mut results),
         None => eprintln!("AnubisDB couldn't find any results for: {}", &host),
     }
 

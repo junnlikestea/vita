@@ -1,7 +1,21 @@
+use crate::ResponseData;
 use crate::Result;
 use std::collections::HashSet;
 
 const API_ERROR: &str = "error check your search parameter";
+
+struct HackerTarget {
+    items: String,
+}
+
+impl ResponseData for HackerTarget {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.items
+            .lines()
+            .map(|s| map.insert(s.split(',').collect::<Vec<&str>>()[0].to_owned()))
+            .for_each(drop);
+    }
+}
 
 fn build_url(host: &str) -> String {
     format!("https://api.hackertarget.com/hostsearch/?q={}", host)
@@ -14,10 +28,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
 
     if resp != API_ERROR {
         match Some(resp) {
-            Some(data) => data
-                .lines()
-                .map(|s| results.insert(s.split(',').collect::<Vec<&str>>()[0].to_owned()))
-                .for_each(drop),
+            Some(items) => HackerTarget { items }.subdomains(&mut results),
             None => eprintln!("HackerTarget, couldn't find results for:{}", &host),
         }
     }

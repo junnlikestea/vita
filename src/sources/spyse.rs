@@ -1,3 +1,4 @@
+use crate::ResponseData;
 use crate::Result;
 use dotenv::dotenv;
 use http_types::headers;
@@ -20,6 +21,16 @@ struct Subdomain {
     name: String,
 }
 
+impl ResponseData for SpyseResult {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.data
+            .items
+            .iter()
+            .map(|i| map.insert(i.name.to_owned()))
+            .for_each(drop);
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!(
         "https://api.spyse.com/v3/data/domain/subdomain?limit=100&domain={}",
@@ -36,7 +47,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     let api_token = env::var("SPYSE_TOKEN")
         .expect("SPYSE_TOKEN must be set in order to use Spyse as a data source");
     let uri = build_url(&host);
-    let mut subdomains = HashSet::new();
+    let mut results = HashSet::new();
     let resp: Option<SpyseResult> = surf::get(uri)
         .set_header(headers::ACCEPT, "application/json")
         .set_header(headers::AUTHORIZATION, format!("Bearer {}", api_token))
@@ -44,16 +55,11 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
         .await?;
 
     match resp {
-        Some(d) => d
-            .data
-            .items
-            .into_iter()
-            .map(|i| subdomains.insert(i.name))
-            .for_each(drop),
+        Some(d) => d.subdomains(&mut results),
         None => eprintln!("Spyse coudln't find any results for: {}", &host),
     }
 
-    Ok(subdomains)
+    Ok(results)
 }
 
 #[cfg(test)]

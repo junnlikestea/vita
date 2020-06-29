@@ -1,3 +1,4 @@
+use crate::ResponseData;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -5,6 +6,15 @@ use std::collections::HashSet;
 #[derive(Deserialize)]
 struct CertSpotterResult {
     dns_names: Vec<String>,
+}
+
+impl ResponseData for Vec<CertSpotterResult> {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.iter()
+            .flat_map(|d| d.dns_names.iter())
+            .map(|s| map.insert(s.into()))
+            .for_each(drop);
+    }
 }
 
 fn build_url(host: &str) -> String {
@@ -21,11 +31,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     let resp: Option<Vec<CertSpotterResult>> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => data
-            .into_iter()
-            .flat_map(|s| s.dns_names.into_iter())
-            .map(|s| results.insert(s))
-            .for_each(drop),
+        Some(data) => data.subdomains(&mut results),
         None => eprintln!("CertSpotter couldn't find results for: {}", &host),
     }
 

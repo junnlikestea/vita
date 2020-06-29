@@ -1,3 +1,4 @@
+use crate::ResponseData;
 use crate::Result;
 use async_std::task;
 use dotenv::dotenv;
@@ -5,10 +6,6 @@ use futures::future::join_all;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
-
-trait ResponseData {
-    fn subdomains(&self, map: &mut HashSet<String>);
-}
 
 #[derive(Deserialize)]
 struct BinaryEdgeResponse {

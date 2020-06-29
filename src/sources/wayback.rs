@@ -1,7 +1,25 @@
+use crate::ResponseData;
 use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use url::Url;
+
+struct WaybackResult {
+    data: Value,
+}
+
+impl ResponseData for WaybackResult {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        let arr = self.data.as_array().unwrap();
+        let vecs: Vec<&str> = arr.iter().map(|s| s[0].as_str().unwrap()).collect();
+        for v in vecs.into_iter() {
+            match Url::parse(v) {
+                Ok(u) => map.insert(u.host_str().unwrap_or("").into()),
+                _ => false,
+            };
+        }
+    }
+}
 
 fn build_url(host: &str) -> String {
     format!(
@@ -11,23 +29,13 @@ fn build_url(host: &str) -> String {
     )
 }
 
-fn parse_result(result: Value, map: &mut HashSet<String>) {
-    let arr = result.as_array().unwrap();
-    let vecs: Vec<&str> = arr.iter().map(|s| s[0].as_str().unwrap()).collect();
-    for v in vecs.into_iter() {
-        match Url::parse(v) {
-            Ok(u) => map.insert(u.host_str().unwrap_or("").into()),
-            _ => false,
-        };
-    }
-}
-
 pub async fn run(host: String) -> Result<HashSet<String>> {
     let mut results = HashSet::new();
     let uri = build_url(&host);
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
+
     match resp {
-        Some(d) => parse_result(d, &mut results),
+        Some(data) => WaybackResult { data }.subdomains(&mut results),
         None => eprintln!("Wayback Machine couldn't find any results for: {}", &host),
     }
 

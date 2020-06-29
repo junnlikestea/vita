@@ -1,3 +1,4 @@
+use crate::ResponseData;
 use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
@@ -71,6 +72,16 @@ struct FacebookResult {
     data: Vec<Subdomains>,
 }
 
+impl ResponseData for FacebookResult {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.data
+            .iter()
+            .flat_map(|s| s.domains.iter())
+            .map(|r| map.insert(r.to_owned()))
+            .for_each(drop);
+    }
+}
+
 fn build_url(host: &str, token: &str) -> String {
     format!(
         "https://graph.facebook.com/certificates?fields=domains&access_token={}&query=*.{}",
@@ -79,22 +90,17 @@ fn build_url(host: &str, token: &str) -> String {
 }
 
 pub async fn run(host: String) -> Result<HashSet<String>> {
-    let mut res: HashSet<String> = HashSet::new();
+    let mut results: HashSet<String> = HashSet::new();
     let access_token = Credentials::from_env().authenticate().await?;
     let uri = build_url(&host, &access_token);
     let resp: Option<FacebookResult> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(d) => d
-            .data
-            .into_iter()
-            .flat_map(|s| s.domains.into_iter())
-            .map(|s| res.insert(s))
-            .for_each(drop),
+        Some(data) => data.subdomains(&mut results),
         None => eprintln!("Facebook couldn't find any results for: {}", &host),
     }
 
-    Ok(res)
+    Ok(results)
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use crate::ResponseData;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -5,26 +6,29 @@ use std::collections::HashSet;
 #[derive(Deserialize)]
 struct BufferOverResult {
     #[serde(rename = "FDNS_A")]
-    subdomains: Option<Vec<String>>,
+    items: Option<Vec<String>>,
 }
 
 fn build_url(host: &str) -> String {
     format!("http://dns.bufferover.run/dns?q={}", host)
 }
 
+impl ResponseData for Vec<String> {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.into_iter()
+            .map(|s| map.insert(s.split(',').collect::<Vec<&str>>()[1].to_owned()))
+            .for_each(drop);
+    }
+}
+
 // query the api returns unique results
 pub async fn run(host: String) -> Result<HashSet<String>> {
     let uri = build_url(&host);
     let mut results = HashSet::new();
-    let BufferOverResult { subdomains } = surf::get(uri).recv_json().await?;
+    let resp: BufferOverResult = surf::get(uri).recv_json().await?;
 
-    match subdomains {
-        Some(data) => {
-            data.into_iter()
-                .map(|s| results.insert(s.split(',').collect::<Vec<&str>>()[1].to_owned()))
-                .for_each(drop);
-        }
-
+    match resp.items {
+        Some(data) => data.subdomains(&mut results),
         None => println!("Bufferover couldn't find results for:{}", &host),
     }
 

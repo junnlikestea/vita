@@ -1,3 +1,4 @@
+use crate::ResponseData;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -13,6 +14,15 @@ struct AlienvaultResult {
     count: i32,
 }
 
+impl ResponseData for AlienvaultResult {
+    fn subdomains(&self, map: &mut HashSet<String>) {
+        self.passive_dns
+            .iter()
+            .map(|s| map.insert(s.hostname.to_owned()))
+            .for_each(drop);
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!(
         "https://otx.alienvault.com/api/v1/indicators/domain/{}/passive_dns",
@@ -26,10 +36,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     let resp: AlienvaultResult = surf::get(uri).recv_json().await?;
 
     if resp.count > 0 {
-        resp.passive_dns
-            .into_iter()
-            .map(|s| results.insert(s.hostname))
-            .for_each(drop);
+        resp.subdomains(&mut results);
     } else {
         eprintln!("Alien Vault didn't find any results for: {}", &host);
     }
