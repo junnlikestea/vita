@@ -15,7 +15,7 @@ fn build_url(host: &str) -> String {
 
 impl ResponseData for Vec<String> {
     fn subdomains(&self, map: &mut HashSet<String>) {
-        self.into_iter()
+        self.iter()
             .map(|s| map.insert(s.split(',').collect::<Vec<&str>>()[1].to_owned()))
             .for_each(drop);
     }
