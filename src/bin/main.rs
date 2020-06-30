@@ -1,6 +1,7 @@
 extern crate vita;
 use clap::{App, Arg};
 use regex::Regex;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
 
@@ -26,13 +27,21 @@ async fn main() -> Result<()> {
     } else {
         hosts = read_stdin()?;
     }
-    let regexs: Vec<Regex> = hosts.clone().into_iter().map(|s| host_regex(&s)).collect();
-    let results = vita::runner(hosts, all_sources).await;
-    for r in results {
-        if is_relevant(&regexs, &r) {
-            println!("{}", r);
-        }
+
+    let regexs: Vec<Regex> = hosts.clone().iter().map(|s| host_regex(&s)).collect();
+    let results = vita::runner(hosts, all_sources)
+        .await
+        .iter()
+        .filter(|a| is_relevant(&regexs, &a))
+        .flat_map(|c| c.split_whitespace())
+        .map(|b| b.to_string())
+        .collect::<HashSet<String>>();
+
+    //let set: HashSet<String> = results.iter().cloned().collect();
+    for subdomain in results.iter() {
+        println!("{}", subdomain);
     }
+
     Ok(())
 }
 

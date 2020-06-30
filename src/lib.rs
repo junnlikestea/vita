@@ -36,7 +36,6 @@ async fn free_sources(host: String) -> HashSet<String> {
         tasks.push(task::spawn(async { s.await }));
     }
 
-    //TODO: handle the results using trait  ResponseData
     join_all(tasks)
         .await
         .into_iter()
@@ -70,7 +69,6 @@ async fn all_sources(host: String) -> HashSet<String> {
         tasks.push(task::spawn(async { s.await }));
     }
 
-    //TODO: handle the results using trait  ResponseData
     join_all(tasks)
         .await
         .into_iter()
