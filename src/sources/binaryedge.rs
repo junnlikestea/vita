@@ -24,15 +24,6 @@ impl ResponseData for BinaryEdgeResponse {
     }
 }
 
-impl ResponseData for Vec<BinaryEdgeResponse> {
-    fn subdomains(&self, map: &mut HashSet<String>) {
-        self.iter()
-            .flat_map(|b| b.events.iter())
-            .map(|s| map.insert(s.into()))
-            .for_each(drop);
-    }
-}
-
 fn build_url(host: &str, page: Option<i32>) -> String {
     match page {
         Some(p) => format!(
@@ -101,9 +92,6 @@ mod tests {
     #[ignore]
     async fn returns_results() {
         let results = run("example.com".to_owned()).await.unwrap();
-        for r in results.iter() {
-            println!("{}", r);
-        }
         assert!(results.len() > 3);
     }
 }

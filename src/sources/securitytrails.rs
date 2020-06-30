@@ -32,7 +32,7 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
     match resp {
         Some(d) => d
             .subdomains
-            .into_iter()
+            .iter()
             .map(|s| results.insert(format!("{}.{}", s, &host)))
             .for_each(drop),
         None => eprintln!("Security Trails couldn't find any results for: {}", &host),

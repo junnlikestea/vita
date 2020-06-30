@@ -60,9 +60,6 @@ mod tests {
     #[async_test]
     async fn returns_results() {
         let results = run("hackerone.com".to_owned()).await.unwrap();
-        for r in results.iter() {
-            println!("{}", r);
-        }
         assert!(results.len() > 0);
     }
 
