@@ -95,6 +95,7 @@ fn is_relevant(reg: &[Regex], target: &str) -> bool {
 
 // builds a regex that filters junk results
 fn host_regex(host: &str) -> Regex {
+    //possible bug with regex. some output counts seem too filtered.
     let mut prefix = r".*\.".to_owned();
     let h = host.replace(".", r"\.");
     prefix.push_str(&h);

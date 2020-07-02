@@ -20,7 +20,8 @@ async fn free_sources(host: String) -> HashSet<String> {
     let sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
         Box::pin(anubisdb::run(host.to_owned())),
         Box::pin(alienvault::run(host.to_owned())),
-        Box::pin(bufferover::run(host.to_owned())),
+        Box::pin(bufferover::run(host.to_owned(), true)),
+        Box::pin(bufferover::run(host.to_owned(), false)),
         Box::pin(certspotter::run(host.to_owned())),
         Box::pin(crtsh::run(host.to_owned())),
         Box::pin(threatcrowd::run(host.to_owned())),
@@ -51,7 +52,8 @@ async fn all_sources(host: String) -> HashSet<String> {
         Box::pin(anubisdb::run(host.to_owned())),
         Box::pin(binaryedge::run(host.to_owned())),
         Box::pin(alienvault::run(host.to_owned())),
-        Box::pin(bufferover::run(host.to_owned())),
+        Box::pin(bufferover::run(host.to_owned(), true)),
+        Box::pin(bufferover::run(host.to_owned(), false)),
         Box::pin(certspotter::run(host.to_owned())),
         Box::pin(crtsh::run(host.to_owned())),
         Box::pin(threatcrowd::run(host.to_owned())),
@@ -79,7 +81,8 @@ async fn all_sources(host: String) -> HashSet<String> {
 
 // Takes a bunch of hosts and collects data on them
 pub async fn runner(hosts: Vec<String>, all: bool) -> Vec<String> {
-    const ACTIVE_REQUESTS: usize = 40;
+    // 150 * 16 = 2400 tasks at one time.
+    const ACTIVE_REQUESTS: usize = 150;
     use futures::stream::StreamExt;
 
     let responses = futures::stream::iter(hosts.into_iter().map(|host| {
