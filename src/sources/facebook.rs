@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fmt;
+use std::sync::Arc;
 
 // Error for case when api authentication fails
 #[derive(Debug)]
@@ -89,7 +90,7 @@ fn build_url(host: &str, token: &str) -> String {
     )
 }
 
-pub async fn run(host: String) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let access_token = Credentials::from_env().authenticate().await?;
     let uri = build_url(&host, &access_token);
@@ -131,7 +132,8 @@ mod tests {
     #[ignore]
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com".to_owned()).await.unwrap();
+        let host = Arc::new("hackerone.com".to_owned());
+        let results = run(host).await.unwrap();
         assert!(results.len() > 3);
     }
 
@@ -141,7 +143,7 @@ mod tests {
     #[ignore]
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com".to_owned();
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

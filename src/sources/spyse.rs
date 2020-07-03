@@ -5,6 +5,7 @@ use http_types::headers;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct SpyseResult {
@@ -38,7 +39,7 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: String) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     // should this process be done with lazy_static macro? otherwise we would be
     // creatng this for every call to run
     //
@@ -78,14 +79,15 @@ mod tests {
     #[ignore]
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com".to_owned()).await.unwrap();
+        let host = Arc::new("hackerone.com".to_owned());
+        let results = run(host).await.unwrap();
         assert!(results.len() > 3);
     }
 
     #[ignore]
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com".to_owned();
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

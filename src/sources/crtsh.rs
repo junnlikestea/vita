@@ -2,6 +2,7 @@ use crate::ResponseData;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Deserialize, Hash, PartialEq, Debug, Eq)]
 struct CrtshResult {
@@ -22,7 +23,7 @@ fn build_url(host: &str) -> String {
     format!("https://crt.sh/?q=%.{}&output=json", host)
 }
 
-pub async fn run(host: String) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(&host);
     let resp: Option<Vec<CrtshResult>> = surf::get(uri).recv_json().await?;
@@ -45,17 +46,19 @@ mod tests {
         let correct_uri = "https://crt.sh/?q=%.hackerone.com&output=json";
         assert_eq!(correct_uri, build_url("hackerone.com"));
     }
+
     #[ignore]
     #[async_test]
     async fn returns_results() {
-        let host = "hackerone.com".to_owned();
+        let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
         assert!(results.len() > 5);
     }
+
     #[ignore] // tests passing locally but failing on linux ci?
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com".to_owned();
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

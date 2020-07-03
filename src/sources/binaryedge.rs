@@ -2,10 +2,10 @@ use crate::ResponseData;
 use crate::Result;
 use async_std::task;
 use dotenv::dotenv;
-use futures::future::join_all;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct BinaryEdgeResponse {
@@ -39,7 +39,7 @@ fn build_url(host: &str, page: Option<i32>) -> String {
 
 // fetches the page in sequential order, it would be better to fetch them concurrently,
 // but for the small amount of pages it probably doesn't matter
-pub async fn run(host: String) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut tasks = Vec::new();
     let mut results: HashSet<String> = HashSet::new();
     let resp = next_page(&host, None).await;
@@ -60,11 +60,9 @@ pub async fn run(host: String) -> Result<HashSet<String>> {
         ));
     }
 
-    join_all(tasks)
-        .await
-        .iter()
-        .map(|s| s.subdomains(&mut results))
-        .for_each(drop);
+    for t in tasks {
+        t.await.subdomains(&mut results);
+    }
 
     Ok(results)
 }
@@ -91,7 +89,8 @@ mod tests {
     #[async_test]
     #[ignore]
     async fn returns_results() {
-        let results = run("example.com".to_owned()).await.unwrap();
+        let host = Arc::new("hackerone.com".to_string());
+        let results = run(host).await.unwrap();
         assert!(results.len() > 3);
     }
 }

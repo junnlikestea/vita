@@ -74,12 +74,8 @@ fn create_clap_app(version: &str) -> clap::App {
 
 fn read_stdin() -> Result<Vec<String>> {
     let mut buffer = String::new();
-    let mut res = Vec::new();
     io::stdin().read_to_string(&mut buffer)?;
-    for line in buffer.split_whitespace() {
-        res.push(line.to_string())
-    }
-    Ok(res)
+    Ok(buffer.split_whitespace().map(|s| s.to_string()).collect())
 }
 
 // instead of returning the match, we could just return a bool if it matches.

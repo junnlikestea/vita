@@ -2,6 +2,7 @@ use crate::ResponseData;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct CertSpotterResult {
@@ -25,7 +26,7 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: String) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let uri = build_url(&host);
     let mut results = HashSet::new();
     let resp: Option<Vec<CertSpotterResult>> = surf::get(uri).recv_json().await?;
@@ -53,14 +54,14 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[async_test]
     async fn returns_results() {
-        let host = "hackerone.com".to_owned();
+        let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
         assert!(results.len() > 3);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com".to_owned();
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
         let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }

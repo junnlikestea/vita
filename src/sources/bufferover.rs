@@ -3,6 +3,7 @@ use crate::Result;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DnsResult {
@@ -45,7 +46,7 @@ fn build_url(host: &str, dns: bool) -> String {
 }
 
 // query the api returns unique results
-pub async fn run(host: String, dns: bool) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>, dns: bool) -> Result<HashSet<String>> {
     let uri = build_url(&host, dns);
     let mut results = HashSet::new();
 
@@ -80,21 +81,21 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = "anVubmxpa2VzdGVh.com".to_owned();
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let results = run(host, true).await.unwrap();
         assert!(results.len() < 1);
     }
 
     #[async_test]
     async fn dns_results() {
-        let host = "hackerone.com".to_owned();
+        let host = Arc::new("hackerone.com".to_owned());
         let results = run(host, true).await.unwrap();
         assert!(results.len() > 1);
     }
 
     #[async_test]
     async fn tls_results() {
-        let host = "hackerone.com".to_owned();
+        let host = Arc::new("hackerone.com".to_owned());
         let results = run(host, false).await.unwrap();
         assert!(results.len() > 1);
     }

@@ -1,6 +1,7 @@
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct ThreatCrowdResult {
@@ -14,7 +15,7 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: String) -> Result<HashSet<String>> {
+pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(&host);
     let resp: ThreatCrowdResult = surf::get(uri).recv_json().await?;
@@ -35,13 +36,15 @@ mod tests {
 
     #[async_test]
     async fn returns_results() {
-        let results = run("hackerone.com".to_owned()).await.unwrap();
+        let host = Arc::new("hackerone.com".to_owned());
+        let results = run(host).await.unwrap();
         assert!(results.len() > 5);
     }
 
     #[async_test]
     async fn handle_no_results() {
-        let results = run("anVubmxpa2VzdGVh.com".to_owned()).await.unwrap();
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
+        let results = run(host).await.unwrap();
         assert!(results.len() < 1);
     }
 }
