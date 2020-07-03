@@ -41,9 +41,10 @@ async fn free_sources(host: Arc<String>) -> HashSet<String> {
 
     for t in tasks {
         t.await
-            .unwrap()
+            .iter()
+            .flatten()
             .into_iter()
-            .map(|s| results.insert(s))
+            .map(|s| results.insert(s.into()))
             .for_each(drop);
     }
 
@@ -79,9 +80,10 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
 
     for t in tasks {
         t.await
-            .unwrap()
+            .iter()
+            .flatten()
             .into_iter()
-            .map(|s| results.insert(s))
+            .map(|s| results.insert(s.into()))
             .for_each(drop);
     }
 
