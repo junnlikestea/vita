@@ -82,6 +82,7 @@ fn read_stdin() -> Result<Vec<String>> {
 // fine for 1 host but what about many?
 fn is_relevant(reg: &[Regex], target: &str) -> bool {
     for re in reg.iter() {
+        println!("{:?}", re);
         if re.is_match(target) {
             return true;
         };
