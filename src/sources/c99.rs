@@ -74,6 +74,7 @@ mod tests {
 
     // Checks to see if the run function returns subdomains
 
+    #[ignore]
     #[async_test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
@@ -84,6 +85,7 @@ mod tests {
         assert!(results.len() > 0);
     }
 
+    #[ignore]
     #[async_test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
