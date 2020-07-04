@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use async_std::task;
 use dotenv::dotenv;
@@ -15,12 +15,9 @@ struct BinaryEdgeResponse {
     events: Vec<String>,
 }
 
-impl ResponseData for BinaryEdgeResponse {
-    fn subdomains(&self, map: &mut HashSet<String>) {
-        self.events
-            .iter()
-            .map(|s| map.insert(s.into()))
-            .for_each(drop);
+impl IntoSubdomain for BinaryEdgeResponse {
+    fn subdomains(&self) -> HashSet<String> {
+        self.events.iter().map(|s| s.into()).collect()
     }
 }
 
@@ -44,7 +41,10 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let resp = next_page(&host, None).await;
     // insert subdomains from first page.
-    resp.subdomains(&mut results);
+    resp.subdomains()
+        .into_iter()
+        .map(|s| results.insert(s))
+        .for_each(drop);
     let mut page = resp.page;
 
     loop {
@@ -61,7 +61,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     }
 
     for t in tasks {
-        t.await.subdomains(&mut results);
+        t.await
+            .subdomains()
+            .into_iter()
+            .map(|s| results.insert(s))
+            .for_each(drop);
     }
 
     Ok(results)

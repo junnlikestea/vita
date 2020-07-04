@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use dotenv::dotenv;
 use http_types::headers;
@@ -22,13 +22,9 @@ struct Subdomain {
     name: String,
 }
 
-impl ResponseData for SpyseResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
-        self.data
-            .items
-            .iter()
-            .map(|i| map.insert(i.name.to_owned()))
-            .for_each(drop);
+impl IntoSubdomain for SpyseResult {
+    fn subdomains(&self) -> HashSet<String> {
+        self.data.items.iter().map(|i| i.name.to_owned()).collect()
     }
 }
 
@@ -56,7 +52,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         .await?;
 
     match resp {
-        Some(d) => d.subdomains(&mut results),
+        Some(d) => return Ok(d.subdomains()),
         None => eprintln!("Spyse coudln't find any results for: {}", &host),
     }
 

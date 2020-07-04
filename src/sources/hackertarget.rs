@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -8,12 +8,12 @@ struct HackerTarget {
     items: String,
 }
 
-impl ResponseData for HackerTarget {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for HackerTarget {
+    fn subdomains(&self) -> HashSet<String> {
         self.items
             .lines()
-            .map(|s| map.insert(s.split(',').collect::<Vec<&str>>()[0].to_owned()))
-            .for_each(drop);
+            .map(|s| s.split(',').collect::<Vec<&str>>()[0].to_owned())
+            .collect()
     }
 }
 
@@ -28,7 +28,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
     if resp != API_ERROR {
         match Some(resp) {
-            Some(items) => HackerTarget { items }.subdomains(&mut results),
+            Some(items) => return Ok(HackerTarget { items }.subdomains()),
             None => eprintln!("HackerTarget, couldn't find results for:{}", &host),
         }
     }

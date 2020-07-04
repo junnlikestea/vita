@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -19,12 +19,12 @@ struct UrlScanDomain {
     domain: String,
 }
 
-impl ResponseData for UrlScanResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for UrlScanResult {
+    fn subdomains(&self) -> HashSet<String> {
         self.results
             .iter()
-            .map(|s| map.insert(s.page.domain.to_owned()))
-            .for_each(drop);
+            .map(|s| s.page.domain.to_string())
+            .collect()
     }
 }
 
@@ -36,10 +36,9 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let uri = build_url(&host);
     let mut results = HashSet::new();
     let resp: Option<UrlScanResult> = surf::get(uri).recv_json().await?;
-    // why loop through twice? and create two maps, we could just use collect on a successful
-    // result and return?
+
     match resp {
-        Some(d) => d.subdomains(&mut results),
+        Some(d) => return Ok(d.subdomains()),
         None => eprintln!("no results"),
     }
 

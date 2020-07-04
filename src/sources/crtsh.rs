@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -9,13 +9,9 @@ struct CrtshResult {
     name_value: String,
 }
 
-impl ResponseData for Vec<CrtshResult> {
-    //todo: is there any need to allocate a new string each time? couldn't
-    // we just pass around references to the string inside the crtshresult struct?
-    fn subdomains(&self, map: &mut HashSet<String>) {
-        self.iter()
-            .map(|s| map.insert(s.name_value.to_owned()))
-            .for_each(drop);
+impl IntoSubdomain for Vec<CrtshResult> {
+    fn subdomains(&self) -> HashSet<String> {
+        self.iter().map(|s| s.name_value.to_owned()).collect()
     }
 }
 
@@ -29,7 +25,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: Option<Vec<CrtshResult>> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => data.subdomains(&mut results),
+        Some(data) => return Ok(data.subdomains()),
         None => eprintln!("Crtsh couldn't find results for:{}", &host),
     }
 

@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
@@ -12,12 +12,12 @@ fn build_url(host: &str) -> String {
     format!("https://api.sublist3r.com/search.php?domain={}", host)
 }
 
-impl ResponseData for SublisterResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for SublisterResult {
+    fn subdomains(&self) -> HashSet<String> {
         self.items
             .iter()
-            .map(|s| map.insert(s.as_str().unwrap().to_owned()))
-            .for_each(drop);
+            .map(|s| s.as_str().unwrap().to_owned())
+            .collect()
     }
 }
 
@@ -34,7 +34,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
                 items: d.as_array().unwrap().to_owned(),
             };
 
-            data.subdomains(&mut results)
+            return Ok(data.subdomains());
         }
         None => eprintln!("Sublist3r couldn't find any results for: {}", &host),
     }

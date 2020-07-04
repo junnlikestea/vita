@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
@@ -9,16 +9,15 @@ struct WaybackResult {
     data: Value,
 }
 
-impl ResponseData for WaybackResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+//TODO: this could be cleaned up, to avoid creating the extra vec `vecs`
+impl IntoSubdomain for WaybackResult {
+    fn subdomains(&self) -> HashSet<String> {
         let arr = self.data.as_array().unwrap();
         let vecs: Vec<&str> = arr.iter().map(|s| s[0].as_str().unwrap()).collect();
-        for v in vecs.into_iter() {
-            match Url::parse(v) {
-                Ok(u) => map.insert(u.host_str().unwrap_or("").into()),
-                _ => false,
-            };
-        }
+        vecs.into_iter()
+            .filter_map(|a| Url::parse(a).ok())
+            .map(|u| u.host_str().unwrap().into())
+            .collect()
     }
 }
 
@@ -36,7 +35,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => WaybackResult { data }.subdomains(&mut results),
+        Some(data) => return Ok(WaybackResult { data }.subdomains()),
         None => eprintln!("Wayback Machine couldn't find any results for: {}", &host),
     }
 

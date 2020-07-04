@@ -11,8 +11,8 @@ use std::sync::Arc;
 // wrapper result type
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-trait ResponseData {
-    fn subdomains(&self, map: &mut HashSet<String>);
+trait IntoSubdomain {
+    fn subdomains(&self) -> HashSet<String>;
 }
 
 // Collects data from all sources which don't require and API key
@@ -43,7 +43,6 @@ async fn free_sources(host: Arc<String>) -> HashSet<String> {
         t.await
             .iter()
             .flatten()
-            .into_iter()
             .map(|s| results.insert(s.into()))
             .for_each(drop);
     }
@@ -82,7 +81,6 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
         t.await
             .iter()
             .flatten()
-            .into_iter()
             .map(|s| results.insert(s.into()))
             .for_each(drop);
     }

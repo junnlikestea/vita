@@ -1,16 +1,16 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-impl ResponseData for Value {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for Value {
+    fn subdomains(&self) -> HashSet<String> {
         self.as_array()
             .unwrap()
             .iter()
-            .map(|s| map.insert(s.as_str().unwrap().into()))
-            .for_each(drop);
+            .map(|s| s.as_str().unwrap().into())
+            .collect()
     }
 }
 
@@ -24,7 +24,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(d) => d.subdomains(&mut results),
+        Some(d) => return Ok(d.subdomains()),
         None => eprintln!("AnubisDB couldn't find any results for: {}", &host),
     }
 

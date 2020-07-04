@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -9,13 +9,10 @@ struct ThreatminerResult {
     results: Vec<String>,
 }
 
-impl ResponseData for ThreatminerResult {
+impl IntoSubdomain for ThreatminerResult {
     //todo: does it have to be HashSet<String> or can we change to HashSet<&str>
-    fn subdomains(&self, map: &mut HashSet<String>) {
-        self.results
-            .iter()
-            .map(|s| map.insert(s.to_owned()))
-            .for_each(drop);
+    fn subdomains(&self) -> HashSet<String> {
+        self.results.iter().map(|s| s.into()).collect()
     }
 }
 pub fn build_url(host: &str) -> String {
@@ -30,7 +27,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut results = HashSet::new();
     let resp: Option<ThreatminerResult> = surf::get(uri).recv_json().await?;
     match resp {
-        Some(d) => d.subdomains(&mut results),
+        Some(d) => return Ok(d.subdomains()),
         None => eprintln!("Threatminer couldn't find any results for: {}", &host),
     }
 

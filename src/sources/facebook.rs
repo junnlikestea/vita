@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
@@ -73,13 +73,13 @@ struct FacebookResult {
     data: Vec<Subdomains>,
 }
 
-impl ResponseData for FacebookResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for FacebookResult {
+    fn subdomains(&self) -> HashSet<String> {
         self.data
             .iter()
             .flat_map(|s| s.domains.iter())
-            .map(|r| map.insert(r.to_owned()))
-            .for_each(drop);
+            .map(|r| r.to_owned())
+            .collect()
     }
 }
 
@@ -97,7 +97,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: Option<FacebookResult> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => data.subdomains(&mut results),
+        Some(data) => return Ok(data.subdomains()),
         None => eprintln!("Facebook couldn't find any results for: {}", &host),
     }
 

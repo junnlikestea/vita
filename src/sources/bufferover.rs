@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,13 +11,13 @@ struct DnsResult {
     items: Option<Vec<String>>,
 }
 
-impl ResponseData for DnsResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for DnsResult {
+    fn subdomains(&self) -> HashSet<String> {
         self.items
             .iter()
             .flatten()
-            .map(|s| map.insert(s.split(',').collect::<Vec<&str>>()[1].to_owned()))
-            .for_each(drop);
+            .map(|s| s.split(',').collect::<Vec<&str>>()[1].to_owned())
+            .collect()
     }
 }
 
@@ -27,13 +27,13 @@ struct TlsResult {
     items: Option<Vec<String>>,
 }
 
-impl ResponseData for TlsResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for TlsResult {
+    fn subdomains(&self) -> HashSet<String> {
         self.items
             .iter()
             .flatten()
-            .map(|s| map.insert(s.split(',').collect::<Vec<&str>>()[2].to_owned()))
-            .for_each(drop);
+            .map(|s| s.split(',').collect::<Vec<&str>>()[2].to_owned())
+            .collect()
     }
 }
 
@@ -53,10 +53,10 @@ pub async fn run(host: Arc<String>, dns: bool) -> Result<HashSet<String>> {
     // check if we are fetching results for `dns.bufferover.run` or tls
     if dns {
         let resp: DnsResult = surf::get(uri).recv_json().await?;
-        resp.subdomains(&mut results);
+        return Ok(resp.subdomains());
     } else {
         let resp: TlsResult = surf::get(uri).recv_json().await?;
-        resp.subdomains(&mut results);
+        return Ok(resp.subdomains());
     }
 
     Ok(results)

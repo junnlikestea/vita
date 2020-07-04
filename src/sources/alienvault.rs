@@ -1,4 +1,4 @@
-use crate::ResponseData;
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -15,12 +15,12 @@ struct AlienvaultResult {
     count: i32,
 }
 
-impl ResponseData for AlienvaultResult {
-    fn subdomains(&self, map: &mut HashSet<String>) {
+impl IntoSubdomain for AlienvaultResult {
+    fn subdomains(&self) -> HashSet<String> {
         self.passive_dns
             .iter()
-            .map(|s| map.insert(s.hostname.to_owned()))
-            .for_each(drop);
+            .map(|s| s.hostname.to_owned())
+            .collect()
     }
 }
 
@@ -37,11 +37,12 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: AlienvaultResult = surf::get(uri).recv_json().await?;
 
     if resp.count > 0 {
-        resp.subdomains(&mut results);
+        return Ok(resp.subdomains());
     } else {
         eprintln!("Alien Vault didn't find any results for: {}", &host);
     }
 
+    //TODO: make a custom error type to return instead of returning an empty hashset
     Ok(results)
 }
 

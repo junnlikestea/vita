@@ -1,3 +1,4 @@
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -11,6 +12,16 @@ struct Subdomain {
 #[derive(Deserialize)]
 struct VirustotalResult {
     data: Option<Vec<Subdomain>>,
+}
+
+impl IntoSubdomain for VirustotalResult {
+    fn subdomains(&self) -> HashSet<String> {
+        self.data
+            .iter()
+            .flatten()
+            .map(|s| s.id.to_string())
+            .collect()
+    }
 }
 
 fn build_url(host: &str) -> String {
@@ -28,16 +39,17 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let uri = build_url(&host);
     let resp: VirustotalResult = surf::get(uri).recv_json().await?;
 
-    match resp.data {
-        Some(data) => data
-            .into_iter()
-            .map(|s| results.insert(s.id))
-            .for_each(drop),
-
-        None => eprintln!("VirusTotal couldn't find results for: {}", &host),
-    }
-
-    Ok(results)
+    //    match resp.data {
+    //        Some(data) => data
+    //            .into_iter()
+    //            .map(|s| results.insert(s.id))
+    //            .for_each(drop),
+    //
+    //        None => eprintln!("VirusTotal couldn't find results for: {}", &host),
+    //    }
+    //
+    //
+    Ok(resp.subdomains())
 }
 
 #[cfg(test)]

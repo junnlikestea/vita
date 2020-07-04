@@ -1,3 +1,4 @@
+use crate::IntoSubdomain;
 use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -6,6 +7,16 @@ use std::sync::Arc;
 #[derive(Deserialize)]
 struct ThreatCrowdResult {
     subdomains: Option<Vec<String>>,
+}
+
+impl IntoSubdomain for ThreatCrowdResult {
+    fn subdomains(&self) -> HashSet<String> {
+        self.subdomains
+            .iter()
+            .flatten()
+            .map(|s| s.to_string())
+            .collect()
+    }
 }
 
 fn build_url(host: &str) -> String {
@@ -19,14 +30,18 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(&host);
     let resp: ThreatCrowdResult = surf::get(uri).recv_json().await?;
+    //Solution A: include stdout info?
+    //    match resp.subdomains {
+    //        Some(data) => data.into_iter().map(|s| results.insert(s)).for_each(drop),
+    //
+    //        None => eprintln!("ThreatCrowd couldn't find results for:{}", &host),
+    //    }
+    //
+    // Solution B: just return the results, who cares about what we don't get?
 
-    match resp.subdomains {
-        Some(data) => data.into_iter().map(|s| results.insert(s)).for_each(drop),
+    Ok(resp.subdomains())
 
-        None => eprintln!("ThreatCrowd couldn't find results for:{}", &host),
-    }
-
-    Ok(results)
+    //Ok(results)
 }
 
 #[cfg(test)]
