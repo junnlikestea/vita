@@ -2,7 +2,7 @@ pub mod sources;
 use async_std::task;
 use futures::future::BoxFuture;
 use sources::{
-    alienvault, anubisdb, binaryedge, bufferover, certspotter, crtsh, facebook, hackertarget,
+    alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, crtsh, facebook, hackertarget,
     spyse, sublister, threatcrowd, threatminer, urlscan, virustotal, wayback,
 };
 use std::collections::HashSet;
@@ -70,6 +70,7 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
         Box::pin(wayback::run(Arc::clone(&host))),
         Box::pin(facebook::run(Arc::clone(&host))),
         Box::pin(spyse::run(Arc::clone(&host))),
+        Box::pin(c99::run(Arc::clone(&host))),
         Box::pin(hackertarget::run(host)),
     ];
 
@@ -90,7 +91,8 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
 
 // Takes a bunch of hosts and collects data on them
 pub async fn runner(hosts: Vec<String>, all: bool) -> Vec<String> {
-    const ACTIVE_REQUESTS: usize = 250;
+    // the number of root domains to fetch data on at a one time
+    const ACTIVE_REQUESTS: usize = 200;
     use futures::stream::StreamExt;
 
     let responses = futures::stream::iter(hosts.into_iter().map(|host| {

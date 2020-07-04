@@ -91,8 +91,6 @@ mod tests {
         assert_eq!(correct_uri, build_url("hackerone.com"));
     }
 
-    // Checks to see if the run function returns subdomains
-    //
     #[ignore] // hangs forever on windows for some reasons?
     #[async_test]
     async fn returns_results() {
@@ -101,7 +99,7 @@ mod tests {
         assert!(results.len() > 0);
     }
 
-    //Some("WaybackMachine couldn't find results for: anVubmxpa2VzdGVh.com")
+    #[ignore]
     #[async_test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
