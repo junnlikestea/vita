@@ -58,7 +58,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         Some(data) => {
             let subdomains = data.subdomains();
 
-            if subdomains.len() != 0 {
+            if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
                 Err(Box::new(CertspotterError::new(host)))

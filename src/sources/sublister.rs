@@ -54,7 +54,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     match resp {
         Some(d) => {
             let subdomains = SublisterResult::new(d.as_array().unwrap().to_owned()).subdomains();
-            if subdomains.len() != 0 {
+            if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
                 Err(Box::new(SublisterError::new(host)))

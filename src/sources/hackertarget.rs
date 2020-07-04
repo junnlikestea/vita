@@ -56,9 +56,10 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let uri = build_url(&host);
     let resp: String = surf::get(uri).recv_string().await?;
 
-    match resp == API_ERROR {
-        true => Err(Box::new(HackerTargetError::new(host))),
-        false => Ok(HackerTarget::new(resp).subdomains()),
+    if resp != API_ERROR {
+        Ok(HackerTarget::new(resp).subdomains())
+    } else {
+        Err(Box::new(HackerTargetError::new(host)))
     }
 }
 

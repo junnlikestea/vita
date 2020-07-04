@@ -55,8 +55,8 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: ThreatCrowdResult = surf::get(uri).recv_json().await?;
     let subdomains = resp.subdomains();
 
-    if subdomains.len() != 0 {
-        return Ok(subdomains);
+    if !subdomains.is_empty() {
+        Ok(subdomains)
     } else {
         Err(Box::new(ThreatCrowdError::new(host)))
     }

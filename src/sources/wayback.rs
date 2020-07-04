@@ -67,8 +67,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     match resp {
         Some(data) => {
             let subdomains = WaybackResult::new(data).subdomains();
-
-            if subdomains.len() != 0 {
+            if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
                 Err(Box::new(WaybackError::new(host)))

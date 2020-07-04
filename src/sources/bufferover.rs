@@ -69,27 +69,23 @@ fn build_url(host: &str, dns: bool) -> String {
 pub async fn run(host: Arc<String>, dns: bool) -> Result<HashSet<String>> {
     let uri = build_url(&host, dns);
 
-    match dns {
-        true => {
-            let resp: DnsResult = surf::get(uri).recv_json().await?;
-            let subdomains = resp.subdomains();
+    if dns {
+        let resp: DnsResult = surf::get(uri).recv_json().await?;
+        let subdomains = resp.subdomains();
 
-            if subdomains.len() > 0 {
-                Ok(subdomains)
-            } else {
-                Err(Box::new(BufferOverError::new(host)))
-            }
+        if !subdomains.is_empty() {
+            Ok(subdomains)
+        } else {
+            Err(Box::new(BufferOverError::new(host)))
         }
+    } else {
+        let resp: TlsResult = surf::get(uri).recv_json().await?;
+        let subdomains = resp.subdomains();
 
-        false => {
-            let resp: TlsResult = surf::get(uri).recv_json().await?;
-            let subdomains = resp.subdomains();
-
-            if subdomains.len() > 0 {
-                Ok(subdomains)
-            } else {
-                Err(Box::new(BufferOverError::new(host)))
-            }
+        if !subdomains.is_empty() {
+            Ok(subdomains)
+        } else {
+            Err(Box::new(BufferOverError::new(host)))
         }
     }
 }

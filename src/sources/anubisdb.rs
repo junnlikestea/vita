@@ -57,7 +57,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         Some(d) => {
             let subdomains = AnubisResult::new(d).subdomains();
 
-            if subdomains.len() != 0 {
+            if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
                 Err(Box::new(AnubisError::new(host)))

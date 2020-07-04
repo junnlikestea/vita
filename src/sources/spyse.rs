@@ -70,7 +70,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     match resp {
         Some(d) => {
             let subdomains = d.subdomains();
-            if subdomains.len() != 0 {
+            if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
                 Err(Box::new(SpyseError::new(host)))
