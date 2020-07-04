@@ -26,7 +26,7 @@ struct CertspotterError {
 
 impl CertspotterError {
     fn new(host: Arc<String>) -> Self {
-        Self { host: host }
+        Self { host }
     }
 }
 

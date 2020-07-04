@@ -36,7 +36,7 @@ struct SpyseError {
 
 impl SpyseError {
     fn new(host: Arc<String>) -> Self {
-        Self { host: host }
+        Self { host }
     }
 }
 

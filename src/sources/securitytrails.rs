@@ -30,7 +30,7 @@ struct SecTrailsError {
 
 impl SecTrailsError {
     fn new(host: Arc<String>) -> Self {
-        Self { host: host }
+        Self { host }
     }
 }
 

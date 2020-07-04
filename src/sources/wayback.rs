@@ -36,7 +36,7 @@ struct WaybackError {
 
 impl WaybackError {
     fn new(host: Arc<String>) -> Self {
-        Self { host: host }
+        Self { host }
     }
 }
 
