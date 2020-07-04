@@ -90,7 +90,7 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
 
 // Takes a bunch of hosts and collects data on them
 pub async fn runner(hosts: Vec<String>, all: bool) -> Vec<String> {
-    const ACTIVE_REQUESTS: usize = 180;
+    const ACTIVE_REQUESTS: usize = 250;
     use futures::stream::StreamExt;
 
     let responses = futures::stream::iter(hosts.into_iter().map(|host| {

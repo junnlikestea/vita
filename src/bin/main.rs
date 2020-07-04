@@ -1,6 +1,6 @@
 extern crate vita;
 use clap::{App, Arg};
-use regex::Regex;
+use regex::RegexSet;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
@@ -28,16 +28,18 @@ async fn main() -> Result<()> {
         hosts = read_stdin()?;
     }
 
-    let regexs: Vec<Regex> = hosts.clone().iter().map(|s| host_regex(&s)).collect();
+    let ree_host: Vec<String> = hosts.iter().map(|s| host_regex(&s)).collect();
+    let host_regexs = RegexSet::new(&ree_host).unwrap();
+    //let wildcard = Regex::new(r"^\*\.").unwrap();
     let results = vita::runner(hosts, all_sources)
         .await
         .iter()
-        .filter(|a| is_relevant(&regexs, &a))
+        .filter(|a| host_regexs.is_match(&a))
+        .filter(|b| !b.starts_with('*'))
         .flat_map(|c| c.split_whitespace())
         .map(|b| b.to_string())
         .collect::<HashSet<String>>();
 
-    //let set: HashSet<String> = results.iter().cloned().collect();
     for subdomain in results.iter() {
         println!("{}", subdomain);
     }
@@ -78,23 +80,11 @@ fn read_stdin() -> Result<Vec<String>> {
     Ok(buffer.split_whitespace().map(|s| s.to_string()).collect())
 }
 
-// instead of returning the match, we could just return a bool if it matches.
-// fine for 1 host but what about many?
-fn is_relevant(reg: &[Regex], target: &str) -> bool {
-    for re in reg.iter() {
-        println!("{:?}", re);
-        if re.is_match(target) {
-            return true;
-        };
-    }
-    false
-}
-
 // builds a regex that filters junk results
-fn host_regex(host: &str) -> Regex {
+fn host_regex(host: &str) -> String {
     //possible bug with regex. some output counts seem too filtered.
     let mut prefix = r".*\.".to_owned();
     let h = host.replace(".", r"\.");
     prefix.push_str(&h);
-    Regex::new(&prefix).unwrap()
+    prefix
 }
