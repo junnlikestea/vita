@@ -2,6 +2,10 @@
 ![release](https://github.com/junnlikestea/vita/workflows/release/badge.svg)
 [![Build status](https://github.com/junnlikestea/vita/workflows/Continuous%20integration/badge.svg)](https://github.com/junnlikestea/vita/actions)
 
+Vita is a tool to gather subdomains from passive sources much like [tomnomnom's assetfinder](https://github.com/tomnomnom/assetfinder).
+
+[![asciicast](https://asciinema.org/a/ksyBsGHQFEePmPCkm3ulDoPEx.svg)](https://asciinema.org/a/ksyBsGHQFEePmPCkm3ulDoPEx)
+
 ### Installation
 Precompiled binaries for vita are available in the [releases](https://github.com/junnlikestea/vita/releases) tab. Just pick your platform and extract the archive that contains the binary.
 
@@ -21,6 +25,7 @@ With a single domain, and collect data from Apis' which don't require keys.:
 ```
 vita -d hackerone.com
 ```
+by default the results will be unique, and will filter subdomains not related to your root domain, or domains if you choose to supply multiple.
 
 With a list of domains from a file:
 ```
@@ -36,8 +41,10 @@ if you want to include sources which require API keys, add the `-a` or `-all` fl
 ```
 vita -d hackerone.com -a
 ``` 
+By default it will just ignore services you don't supply keys for.
 
 ### Sources
+* C99
 * AnubisDB
 * Alienvault
 * Binaryedge - be careful running this on a large host if you have a free license. Vita fetches every page of results.
@@ -56,7 +63,7 @@ vita -d hackerone.com -a
 * dns.bufferover.run
 
 ### How to set your Api Keys
-Add a `.env` file to the directory, and set the following variables:
+Add a `.env` file to the tool directory or add the following to your existing `.env` file:
 * Binaryedge:
 	* Needs `BINARYEDGE_TOKEN` set
 * Facebook:
@@ -65,13 +72,16 @@ Add a `.env` file to the directory, and set the following variables:
 	* Needs `SPYSE_TOKEN` set.
 * Security Trails:
 	* Needs `SECURITY_TRAILS_KEY` set.
+* C99: 
+	* Needs `C99_KEY` set.
 
-If you hit rate limits or authentication fails, you will get a message in `stderror`, this will not
-be printed in the final output.
+If you hit rate limits or authentication fails, the source will just be ignored from the list of potential sources.
+
 ### To-do
 * Add more paid sources.
 * Clean up some data stuctures and methods.
 * Optimise performance further.
+
 ### Disclaimer
 Developers have/has no responsibility or authority over any kind of:
 * Legal or Law infringement by third parties and users.
