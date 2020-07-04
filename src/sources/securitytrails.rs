@@ -98,6 +98,7 @@ mod tests {
         assert!(results.len() > 0);
     }
 
+    #[ignore]
     #[async_test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
