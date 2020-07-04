@@ -1,13 +1,49 @@
+use crate::IntoSubdomain;
 use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct SecTrailsResult {
     subdomains: Vec<String>,
+    #[serde(skip)]
+    host: Arc<String>,
+}
+
+impl IntoSubdomain for SecTrailsResult {
+    fn subdomains(&self) -> HashSet<String> {
+        self.subdomains
+            .iter()
+            .map(|s| format!("{}.{}", s, self.host))
+            .collect()
+    }
+}
+
+#[derive(Debug)]
+struct SecTrailsError {
+    host: Arc<String>,
+}
+
+impl SecTrailsError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for SecTrailsError {}
+
+impl fmt::Display for SecTrailsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "SecurityTrails couldn't find any results for: {}",
+            self.host
+        )
+    }
 }
 
 fn build_url(host: &str) -> String {
@@ -20,26 +56,26 @@ fn build_url(host: &str) -> String {
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     dotenv().ok();
     let api_key = env::var("SECURITY_TRAILS_KEY")
-        .expect("SECURITY_TRAILS_KEY must be set to use Security Trails API");
-    let mut results = HashSet::new();
+        .expect("SECURITY_TRAILS_KEY must be set to use SecurityTrails API");
     let uri = build_url(&host);
     let resp: Option<SecTrailsResult> = surf::get(uri)
         .set_header("apikey", api_key)
         .recv_json()
         .await?;
-    // secuirity trails doesn't add the host name to the result.
-    // so api.hackerone.com will just be api in the results.
-    // we will add the hostname manually to result.
-    match resp {
-        Some(d) => d
-            .subdomains
-            .iter()
-            .map(|s| results.insert(format!("{}.{}", s, &host)))
-            .for_each(drop),
-        None => eprintln!("Security Trails couldn't find any results for: {}", &host),
-    }
 
-    Ok(results)
+    match resp {
+        Some(d) => {
+            let subdomains = d.subdomains();
+
+            if subdomains.len() != 0 {
+                Ok(subdomains)
+            } else {
+                Err(Box::new(SecTrailsError::new(host)))
+            }
+        }
+
+        None => Err(Box::new(SecTrailsError::new(host))),
+    }
 }
 
 #[cfg(test)]
@@ -62,11 +98,14 @@ mod tests {
         assert!(results.len() > 0);
     }
 
-    #[ignore]
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("hdsad.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() == 0);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "SecurityTrails couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

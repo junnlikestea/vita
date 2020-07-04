@@ -3,6 +3,7 @@ use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct CertSpotterResult {
@@ -18,6 +19,29 @@ impl IntoSubdomain for Vec<CertSpotterResult> {
     }
 }
 
+#[derive(Debug)]
+struct CertspotterError {
+    host: Arc<String>,
+}
+
+impl CertspotterError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for CertspotterError {}
+
+impl fmt::Display for CertspotterError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Certspotter couldn't find any results for: {}",
+            self.host
+        )
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!(
         "https://api.certspotter.com/v1/issuances?domain={}\
@@ -28,15 +52,20 @@ fn build_url(host: &str) -> String {
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let uri = build_url(&host);
-    let mut results = HashSet::new();
     let resp: Option<Vec<CertSpotterResult>> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => return Ok(data.subdomains()),
-        None => eprintln!("CertSpotter couldn't find results for: {}", &host),
-    }
+        Some(data) => {
+            let subdomains = data.subdomains();
 
-    Ok(results)
+            if subdomains.len() != 0 {
+                Ok(subdomains)
+            } else {
+                Err(Box::new(CertspotterError::new(host)))
+            }
+        }
+        _ => Err(Box::new(CertspotterError::new(host))),
+    }
 }
 
 #[cfg(test)]
@@ -61,8 +90,12 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() < 1);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "Certspotter couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

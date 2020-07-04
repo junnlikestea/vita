@@ -3,13 +3,16 @@ use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 struct SublisterResult {
     items: Vec<Value>,
 }
 
-fn build_url(host: &str) -> String {
-    format!("https://api.sublist3r.com/search.php?domain={}", host)
+impl SublisterResult {
+    fn new(items: Vec<Value>) -> Self {
+        SublisterResult { items }
+    }
 }
 
 impl IntoSubdomain for SublisterResult {
@@ -21,25 +24,45 @@ impl IntoSubdomain for SublisterResult {
     }
 }
 
+#[derive(Debug)]
+struct SublisterError {
+    host: Arc<String>,
+}
+
+impl SublisterError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for SublisterError {}
+
+impl fmt::Display for SublisterError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Sublister couldn't find any results for: {}", self.host)
+    }
+}
+
+fn build_url(host: &str) -> String {
+    format!("https://api.sublist3r.com/search.php?domain={}", host)
+}
+
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let mut results = HashSet::new();
     let uri = build_url(&host);
     let resp: Option<Value> = surf::get(uri).recv_json().await?;
-    //TODO: isn't there a more efficient way to do this (complexity wise)
-    // not just this source, but multiple sources have unecessary loops.
+
     match resp {
         Some(d) => {
-            //kinda messy
-            let data = SublisterResult {
-                items: d.as_array().unwrap().to_owned(),
-            };
-
-            return Ok(data.subdomains());
+            let subdomains = SublisterResult::new(d.as_array().unwrap().to_owned()).subdomains();
+            if subdomains.len() != 0 {
+                Ok(subdomains)
+            } else {
+                Err(Box::new(SublisterError::new(host)))
+            }
         }
-        None => eprintln!("Sublist3r couldn't find any results for: {}", &host),
-    }
 
-    Ok(results)
+        None => Err(Box::new(SublisterError::new(host))),
+    }
 }
 
 #[cfg(test)]
@@ -63,8 +86,12 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("hdsad.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() == 0);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "Sublister couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

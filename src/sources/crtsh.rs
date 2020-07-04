@@ -3,6 +3,7 @@ use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Deserialize, Hash, PartialEq, Debug, Eq)]
 struct CrtshResult {
@@ -15,21 +16,37 @@ impl IntoSubdomain for Vec<CrtshResult> {
     }
 }
 
+#[derive(Debug)]
+struct CrtshError {
+    host: Arc<String>,
+}
+
+impl CrtshError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for CrtshError {}
+
+impl fmt::Display for CrtshError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Crtsh couldn't find any results for: {}", self.host)
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!("https://crt.sh/?q=%.{}&output=json", host)
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(&host);
     let resp: Option<Vec<CrtshResult>> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => return Ok(data.subdomains()),
-        None => eprintln!("Crtsh couldn't find results for:{}", &host),
+        Some(data) => Ok(data.subdomains()),
+        None => Err(Box::new(CrtshError::new(host))),
     }
-
-    Ok(results)
 }
 
 #[cfg(test)]
@@ -54,8 +71,12 @@ mod tests {
     #[ignore] // tests passing locally but failing on linux ci?
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() < 1);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "Crtsh couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

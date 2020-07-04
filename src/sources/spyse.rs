@@ -6,6 +6,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct SpyseResult {
@@ -28,6 +29,25 @@ impl IntoSubdomain for SpyseResult {
     }
 }
 
+#[derive(Debug)]
+struct SpyseError {
+    host: Arc<String>,
+}
+
+impl SpyseError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for SpyseError {}
+
+impl fmt::Display for SpyseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Spyse couldn't find any results for: {}", self.host)
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!(
         "https://api.spyse.com/v3/data/domain/subdomain?limit=100&domain={}",
@@ -36,15 +56,11 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    // should this process be done with lazy_static macro? otherwise we would be
-    // creatng this for every call to run
-    //
     // TODO:// handle pagnation?
     dotenv().ok();
     let api_token = env::var("SPYSE_TOKEN")
         .expect("SPYSE_TOKEN must be set in order to use Spyse as a data source");
     let uri = build_url(&host);
-    let mut results = HashSet::new();
     let resp: Option<SpyseResult> = surf::get(uri)
         .set_header(headers::ACCEPT, "application/json")
         .set_header(headers::AUTHORIZATION, format!("Bearer {}", api_token))
@@ -52,11 +68,17 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         .await?;
 
     match resp {
-        Some(d) => return Ok(d.subdomains()),
-        None => eprintln!("Spyse coudln't find any results for: {}", &host),
-    }
+        Some(d) => {
+            let subdomains = d.subdomains();
+            if subdomains.len() != 0 {
+                Ok(subdomains)
+            } else {
+                Err(Box::new(SpyseError::new(host)))
+            }
+        }
 
-    Ok(results)
+        None => Err(Box::new(SpyseError::new(host))),
+    }
 }
 
 #[cfg(test)]
@@ -80,11 +102,14 @@ mod tests {
         assert!(results.len() > 3);
     }
 
-    #[ignore]
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() < 1);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "Spyse couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

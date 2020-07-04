@@ -3,6 +3,7 @@ use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct Subdomain {
@@ -24,6 +25,25 @@ impl IntoSubdomain for VirustotalResult {
     }
 }
 
+#[derive(Debug)]
+struct VirusTotalError {
+    host: Arc<String>,
+}
+
+impl VirusTotalError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for VirusTotalError {}
+
+impl fmt::Display for VirusTotalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "VirusTotal couldn't find any results for: {}", self.host)
+    }
+}
+
 fn build_url(host: &str) -> String {
     // TODO: can we gather the subdomains using:
     // Handle pagenation
@@ -35,21 +55,15 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(&host);
     let resp: VirustotalResult = surf::get(uri).recv_json().await?;
+    let subdomains = resp.subdomains();
 
-    //    match resp.data {
-    //        Some(data) => data
-    //            .into_iter()
-    //            .map(|s| results.insert(s.id))
-    //            .for_each(drop),
-    //
-    //        None => eprintln!("VirusTotal couldn't find results for: {}", &host),
-    //    }
-    //
-    //
-    Ok(resp.subdomains())
+    if subdomains.len() != 0 {
+        Ok(subdomains)
+    } else {
+        Err(Box::new(VirusTotalError::new(host)))
+    }
 }
 
 #[cfg(test)]
@@ -67,11 +81,15 @@ mod tests {
         assert!(results.len() > 5);
     }
 
-    #[async_test]
     #[ignore]
+    #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() < 1);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "VirusTotal couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

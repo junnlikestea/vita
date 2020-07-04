@@ -3,6 +3,7 @@ use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct ThreatCrowdResult {
@@ -19,6 +20,29 @@ impl IntoSubdomain for ThreatCrowdResult {
     }
 }
 
+#[derive(Debug)]
+struct ThreatCrowdError {
+    host: Arc<String>,
+}
+
+impl ThreatCrowdError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for ThreatCrowdError {}
+
+impl fmt::Display for ThreatCrowdError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ThreatCrowd couldn't find any results for: {}",
+            self.host
+        )
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!(
         "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={}",
@@ -27,21 +51,15 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let mut results: HashSet<String> = HashSet::new();
     let uri = build_url(&host);
     let resp: ThreatCrowdResult = surf::get(uri).recv_json().await?;
-    //Solution A: include stdout info?
-    //    match resp.subdomains {
-    //        Some(data) => data.into_iter().map(|s| results.insert(s)).for_each(drop),
-    //
-    //        None => eprintln!("ThreatCrowd couldn't find results for:{}", &host),
-    //    }
-    //
-    // Solution B: just return the results, who cares about what we don't get?
+    let subdomains = resp.subdomains();
 
-    Ok(resp.subdomains())
-
-    //Ok(results)
+    if subdomains.len() != 0 {
+        return Ok(subdomains);
+    } else {
+        Err(Box::new(ThreatCrowdError::new(host)))
+    }
 }
 
 #[cfg(test)]
@@ -58,8 +76,12 @@ mod tests {
 
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() < 1);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "ThreatCrowd couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DnsResult {
@@ -37,6 +38,25 @@ impl IntoSubdomain for TlsResult {
     }
 }
 
+#[derive(Debug)]
+struct BufferOverError {
+    host: Arc<String>,
+}
+
+impl BufferOverError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for BufferOverError {}
+
+impl fmt::Display for BufferOverError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "BufferOver couldn't find any results for: {}", self.host)
+    }
+}
+
 fn build_url(host: &str, dns: bool) -> String {
     if dns {
         format!("http://dns.bufferover.run/dns?q={}", host)
@@ -48,18 +68,30 @@ fn build_url(host: &str, dns: bool) -> String {
 // query the api returns unique results
 pub async fn run(host: Arc<String>, dns: bool) -> Result<HashSet<String>> {
     let uri = build_url(&host, dns);
-    let mut results = HashSet::new();
 
-    // check if we are fetching results for `dns.bufferover.run` or tls
-    if dns {
-        let resp: DnsResult = surf::get(uri).recv_json().await?;
-        return Ok(resp.subdomains());
-    } else {
-        let resp: TlsResult = surf::get(uri).recv_json().await?;
-        return Ok(resp.subdomains());
+    match dns {
+        true => {
+            let resp: DnsResult = surf::get(uri).recv_json().await?;
+            let subdomains = resp.subdomains();
+
+            if subdomains.len() > 0 {
+                Ok(subdomains)
+            } else {
+                Err(Box::new(BufferOverError::new(host)))
+            }
+        }
+
+        false => {
+            let resp: TlsResult = surf::get(uri).recv_json().await?;
+            let subdomains = resp.subdomains();
+
+            if subdomains.len() > 0 {
+                Ok(subdomains)
+            } else {
+                Err(Box::new(BufferOverError::new(host)))
+            }
+        }
     }
-
-    Ok(results)
 }
 
 #[cfg(test)]
@@ -80,13 +112,6 @@ mod tests {
     }
 
     #[async_test]
-    async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let results = run(host, true).await.unwrap();
-        assert!(results.len() < 1);
-    }
-
-    #[async_test]
     async fn dns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host, true).await.unwrap();
@@ -98,5 +123,16 @@ mod tests {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host, false).await.unwrap();
         assert!(results.len() > 1);
+    }
+
+    #[async_test]
+    async fn handle_no_results() {
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host, true).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "BufferOver couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

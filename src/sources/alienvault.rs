@@ -3,13 +3,14 @@ use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct Subdomain {
     hostname: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct AlienvaultResult {
     passive_dns: Vec<Subdomain>,
     count: i32,
@@ -24,6 +25,25 @@ impl IntoSubdomain for AlienvaultResult {
     }
 }
 
+#[derive(Debug)]
+struct AlienVaultError {
+    host: Arc<String>,
+}
+
+impl AlienVaultError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for AlienVaultError {}
+
+impl fmt::Display for AlienVaultError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "AlienVault couldn't find any results for: {}", self.host)
+    }
+}
+
 fn build_url(host: &str) -> String {
     format!(
         "https://otx.alienvault.com/api/v1/indicators/domain/{}/passive_dns",
@@ -32,18 +52,13 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let mut results = HashSet::new();
     let uri = build_url(&host);
     let resp: AlienvaultResult = surf::get(uri).recv_json().await?;
 
-    if resp.count > 0 {
-        return Ok(resp.subdomains());
-    } else {
-        eprintln!("Alien Vault didn't find any results for: {}", &host);
+    match resp.count {
+        0 => Err(Box::new(AlienVaultError::new(Arc::clone(&host)))),
+        _ => Ok(resp.subdomains()),
     }
-
-    //TODO: make a custom error type to return instead of returning an empty hashset
-    Ok(results)
 }
 
 #[cfg(test)]
@@ -69,7 +84,11 @@ mod tests {
     #[async_test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let results = run(host).await.unwrap();
-        assert!(results.len() == 0);
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "AlienVault couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }

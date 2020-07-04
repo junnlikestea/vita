@@ -4,9 +4,8 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
-use std::error::Error;
-use std::fmt;
 use std::sync::Arc;
+use std::{error::Error, fmt};
 
 // Error for case when api authentication fails
 #[derive(Debug)]
@@ -58,7 +57,7 @@ impl Credentials {
         if let Some(r) = resp {
             Ok(r.access_token)
         } else {
-            Err(FacebookAuthError.into())
+            Err(Box::new(FacebookAuthError))
         }
     }
 }
@@ -83,6 +82,25 @@ impl IntoSubdomain for FacebookResult {
     }
 }
 
+#[derive(Debug)]
+struct FacebookError {
+    host: Arc<String>,
+}
+
+impl FacebookError {
+    fn new(host: Arc<String>) -> Self {
+        Self { host: host }
+    }
+}
+
+impl Error for FacebookError {}
+
+impl fmt::Display for FacebookError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Facebook couldn't find any results for: {}", self.host)
+    }
+}
+
 fn build_url(host: &str, token: &str) -> String {
     format!(
         "https://graph.facebook.com/certificates?fields=domains&access_token={}&query=*.{}",
@@ -91,17 +109,14 @@ fn build_url(host: &str, token: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let mut results: HashSet<String> = HashSet::new();
     let access_token = Credentials::from_env().authenticate().await?;
     let uri = build_url(&host, &access_token);
     let resp: Option<FacebookResult> = surf::get(uri).recv_json().await?;
 
     match resp {
-        Some(data) => return Ok(data.subdomains()),
-        None => eprintln!("Facebook couldn't find any results for: {}", &host),
+        Some(data) => Ok(data.subdomains()),
+        None => Err(Box::new(FacebookError::new(host))),
     }
-
-    Ok(results)
 }
 
 #[cfg(test)]
@@ -137,14 +152,17 @@ mod tests {
         assert!(results.len() > 3);
     }
 
-    // we don't care about panicing or anything, since we just want to return a blank result
-    // when the source doesn't have any data.
-    //
+    // Checks that if we get no results that we just return an error.
+    // test is ignored by default to preserve limits
     #[ignore]
     #[async_test]
     async fn handle_no_results() {
-        let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host).await.unwrap();
-        assert!(results.len() < 1);
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "Facebook couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
     }
 }
