@@ -34,9 +34,9 @@ async fn main() -> Result<()> {
     let results = vita::runner(hosts, all_sources)
         .await
         .iter()
+        .flat_map(|c| c.split_whitespace())
         .filter(|a| host_regexs.is_match(&a))
         .filter(|b| !b.starts_with('*'))
-        .flat_map(|c| c.split_whitespace())
         .map(|b| b.to_string())
         .collect::<HashSet<String>>();
 
@@ -86,5 +86,6 @@ fn host_regex(host: &str) -> String {
     let mut prefix = r".*\.".to_owned();
     let h = host.replace(".", r"\.");
     prefix.push_str(&h);
+    prefix.push_str("$");
     prefix
 }
