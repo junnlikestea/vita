@@ -1,11 +1,10 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct SecTrailsResult {
@@ -20,29 +19,6 @@ impl IntoSubdomain for SecTrailsResult {
             .iter()
             .map(|s| format!("{}.{}", s, self.host))
             .collect()
-    }
-}
-
-#[derive(Debug)]
-struct SecTrailsError {
-    host: Arc<String>,
-}
-
-impl SecTrailsError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for SecTrailsError {}
-
-impl fmt::Display for SecTrailsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "SecurityTrails couldn't find any results for: {}",
-            self.host
-        )
     }
 }
 
@@ -69,11 +45,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(SecTrailsError::new(host)))
+                Err(Error::source_error("SecurityTrails", host))
             }
         }
 
-        None => Err(Box::new(SecTrailsError::new(host))),
+        None => Err(Error::source_error("SecurityTrails", host)),
     }
 }
 

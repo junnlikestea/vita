@@ -1,27 +1,10 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::{error::Error, fmt};
-
-// Error for case when api authentication fails
-#[derive(Debug)]
-pub struct FacebookAuthError;
-
-// Display implementation is required for std::error::Error.
-impl fmt::Display for FacebookAuthError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Failed to authenticated to the Facebook API using the credentials supplied."
-        )
-    }
-}
-
-impl Error for FacebookAuthError {}
 
 #[derive(Debug, PartialEq)]
 struct Credentials {
@@ -57,7 +40,7 @@ impl Credentials {
         if let Some(r) = resp {
             Ok(r.access_token)
         } else {
-            Err(Box::new(FacebookAuthError))
+            Err(Error::fb_auth_error())
         }
     }
 }
@@ -82,25 +65,6 @@ impl IntoSubdomain for FacebookResult {
     }
 }
 
-#[derive(Debug)]
-struct FacebookError {
-    host: Arc<String>,
-}
-
-impl FacebookError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for FacebookError {}
-
-impl fmt::Display for FacebookError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Facebook couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str, token: &str) -> String {
     format!(
         "https://graph.facebook.com/certificates?fields=domains&access_token={}&query=*.{}",
@@ -115,7 +79,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
     match resp {
         Some(data) => Ok(data.subdomains()),
-        None => Err(Box::new(FacebookError::new(host))),
+        None => Err(Error::source_error("Facebook", host)),
     }
 }
 

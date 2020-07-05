@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize, Debug)]
 struct Subdomain {
@@ -25,25 +24,6 @@ impl IntoSubdomain for AlienvaultResult {
     }
 }
 
-#[derive(Debug)]
-struct AlienVaultError {
-    host: Arc<String>,
-}
-
-impl AlienVaultError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for AlienVaultError {}
-
-impl fmt::Display for AlienVaultError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "AlienVault couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str) -> String {
     format!(
         "https://otx.alienvault.com/api/v1/indicators/domain/{}/passive_dns",
@@ -56,7 +36,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let resp: AlienvaultResult = surf::get(uri).recv_json().await?;
 
     match resp.count {
-        0 => Err(Box::new(AlienVaultError::new(Arc::clone(&host)))),
+        0 => Err(Error::source_error("AlienVault", host)),
         _ => Ok(resp.subdomains()),
     }
 }

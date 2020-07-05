@@ -1,10 +1,9 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DnsResult {
@@ -38,25 +37,6 @@ impl IntoSubdomain for TlsResult {
     }
 }
 
-#[derive(Debug)]
-struct BufferOverError {
-    host: Arc<String>,
-}
-
-impl BufferOverError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for BufferOverError {}
-
-impl fmt::Display for BufferOverError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "BufferOver couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str, dns: bool) -> String {
     if dns {
         format!("http://dns.bufferover.run/dns?q={}", host)
@@ -76,7 +56,7 @@ pub async fn run(host: Arc<String>, dns: bool) -> Result<HashSet<String>> {
         if !subdomains.is_empty() {
             Ok(subdomains)
         } else {
-            Err(Box::new(BufferOverError::new(host)))
+            Err(Error::source_error("BufferOverDns", host))
         }
     } else {
         let resp: TlsResult = surf::get(uri).recv_json().await?;
@@ -85,7 +65,7 @@ pub async fn run(host: Arc<String>, dns: bool) -> Result<HashSet<String>> {
         if !subdomains.is_empty() {
             Ok(subdomains)
         } else {
-            Err(Box::new(BufferOverError::new(host)))
+            Err(Error::source_error("BufferoverTLS", host))
         }
     }
 }

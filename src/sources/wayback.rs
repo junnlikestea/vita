@@ -1,11 +1,9 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 use url::Url;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 struct WaybackResult {
     data: Value,
@@ -29,29 +27,6 @@ impl IntoSubdomain for WaybackResult {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct WaybackError {
-    host: Arc<String>,
-}
-
-impl WaybackError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for WaybackError {}
-
-impl fmt::Display for WaybackError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "WaybackMachine couldn't find any results for: {}",
-            self.host
-        )
-    }
-}
-
 fn build_url(host: &str) -> String {
     format!(
         "https://web.archive.org/cdx/search/cdx?url=*.{}/*&output=json\
@@ -70,11 +45,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(WaybackError::new(host)))
+                Err(Error::source_error("Wayback Machine", host))
             }
         }
 
-        None => Err(Box::new(WaybackError::new(host))),
+        None => Err(Error::source_error("Wayback Machine", host)),
     }
 }
 
@@ -107,7 +82,7 @@ mod tests {
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
-            "WaybackMachine couldn't find any results for: anVubmxpa2VzdGVh.com"
+            "Wayback Machine couldn't find any results for: anVubmxpa2VzdGVh.com"
         );
     }
 }

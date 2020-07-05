@@ -1,11 +1,10 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct C99Result {
@@ -27,25 +26,6 @@ impl IntoSubdomain for C99Result {
     }
 }
 
-#[derive(Debug)]
-struct C99Error {
-    host: Arc<String>,
-}
-
-impl C99Error {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for C99Error {}
-
-impl fmt::Display for C99Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "C99 couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str, api_key: &str) -> String {
     format!(
         "https://api.c99.nl/subdomainfinder?key={}&domain={}&json",
@@ -63,7 +43,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     if !subdomains.is_empty() {
         Ok(subdomains)
     } else {
-        Err(Box::new(C99Error::new(host)))
+        Err(Error::source_error("C99", host))
     }
 }
 

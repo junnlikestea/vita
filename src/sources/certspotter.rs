@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct CertSpotterResult {
@@ -16,29 +15,6 @@ impl IntoSubdomain for Vec<CertSpotterResult> {
             .flat_map(|d| d.dns_names.iter())
             .map(|s| s.into())
             .collect()
-    }
-}
-
-#[derive(Debug)]
-struct CertspotterError {
-    host: Arc<String>,
-}
-
-impl CertspotterError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for CertspotterError {}
-
-impl fmt::Display for CertspotterError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Certspotter couldn't find any results for: {}",
-            self.host
-        )
     }
 }
 
@@ -61,10 +37,10 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(CertspotterError::new(host)))
+                Err(Error::source_error("CertSpotter", host))
             }
         }
-        _ => Err(Box::new(CertspotterError::new(host))),
+        _ => Err(Error::source_error("CertSpotter", host)),
     }
 }
 

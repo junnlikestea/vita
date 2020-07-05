@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct Subdomain {
@@ -25,25 +24,6 @@ impl IntoSubdomain for VirustotalResult {
     }
 }
 
-#[derive(Debug)]
-struct VirusTotalError {
-    host: Arc<String>,
-}
-
-impl VirusTotalError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for VirusTotalError {}
-
-impl fmt::Display for VirusTotalError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "VirusTotal couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str) -> String {
     // TODO: can we gather the subdomains using:
     // Handle pagenation
@@ -62,7 +42,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     if !subdomains.is_empty() {
         Ok(subdomains)
     } else {
-        Err(Box::new(VirusTotalError::new(host)))
+        Err(Error::source_error("VirusTotal", host))
     }
 }
 

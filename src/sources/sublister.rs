@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 struct SublisterResult {
     items: Vec<Value>,
@@ -24,25 +23,6 @@ impl IntoSubdomain for SublisterResult {
     }
 }
 
-#[derive(Debug)]
-struct SublisterError {
-    host: Arc<String>,
-}
-
-impl SublisterError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for SublisterError {}
-
-impl fmt::Display for SublisterError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Sublister couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str) -> String {
     format!("https://api.sublist3r.com/search.php?domain={}", host)
 }
@@ -57,11 +37,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(SublisterError::new(host)))
+                Err(Error::source_error("Sublist3r", host))
             }
         }
 
-        None => Err(Box::new(SublisterError::new(host))),
+        None => Err(Error::source_error("Sublist3r", host)),
     }
 }
 

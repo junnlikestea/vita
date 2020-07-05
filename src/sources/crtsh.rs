@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize, Hash, PartialEq, Debug, Eq)]
 struct CrtshResult {
@@ -13,25 +12,6 @@ struct CrtshResult {
 impl IntoSubdomain for Vec<CrtshResult> {
     fn subdomains(&self) -> HashSet<String> {
         self.iter().map(|s| s.name_value.to_owned()).collect()
-    }
-}
-
-#[derive(Debug)]
-struct CrtshError {
-    host: Arc<String>,
-}
-
-impl CrtshError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for CrtshError {}
-
-impl fmt::Display for CrtshError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Crtsh couldn't find any results for: {}", self.host)
     }
 }
 
@@ -45,7 +25,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
     match resp {
         Some(data) => Ok(data.subdomains()),
-        None => Err(Box::new(CrtshError::new(host))),
+        None => Err(Error::source_error("Crt.sh", host)),
     }
 }
 
@@ -76,7 +56,7 @@ mod tests {
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
-            "Crtsh couldn't find any results for: anVubmxpa2VzdGVh.com"
+            "Crt.sh couldn't find any results for: anVubmxpa2VzdGVh.com"
         );
     }
 }

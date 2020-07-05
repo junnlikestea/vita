@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct ThreatminerResult {
@@ -17,28 +16,6 @@ impl IntoSubdomain for ThreatminerResult {
     }
 }
 
-#[derive(Debug)]
-struct ThreatminerError {
-    host: Arc<String>,
-}
-
-impl ThreatminerError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for ThreatminerError {}
-
-impl fmt::Display for ThreatminerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "ThreatMiner couldn't find any results for: {}",
-            self.host
-        )
-    }
-}
 pub fn build_url(host: &str) -> String {
     format!(
         "https://api.threatminer.org/v2/domain.php?q={}&api=True&rt=5",
@@ -56,11 +33,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(ThreatminerError::new(host)))
+                Err(Error::source_error("ThreatMiner", host))
             }
         }
 
-        None => Err(Box::new(ThreatminerError::new(host))),
+        None => Err(Error::source_error("ThreatMiner", host)),
     }
 }
 

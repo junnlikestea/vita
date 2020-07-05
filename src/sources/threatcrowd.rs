@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct ThreatCrowdResult {
@@ -17,29 +16,6 @@ impl IntoSubdomain for ThreatCrowdResult {
             .flatten()
             .map(|s| s.to_string())
             .collect()
-    }
-}
-
-#[derive(Debug)]
-struct ThreatCrowdError {
-    host: Arc<String>,
-}
-
-impl ThreatCrowdError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for ThreatCrowdError {}
-
-impl fmt::Display for ThreatCrowdError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "ThreatCrowd couldn't find any results for: {}",
-            self.host
-        )
     }
 }
 
@@ -58,7 +34,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     if !subdomains.is_empty() {
         Ok(subdomains)
     } else {
-        Err(Box::new(ThreatCrowdError::new(host)))
+        Err(Error::source_error("ThreatCrowd", host))
     }
 }
 

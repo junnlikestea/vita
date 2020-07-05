@@ -1,5 +1,7 @@
+pub mod error;
 pub mod sources;
 use async_std::task;
+use error::Result;
 use futures::future::BoxFuture;
 use sources::{
     alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, crtsh, facebook, hackertarget,
@@ -9,7 +11,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 // wrapper result type
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 trait IntoSubdomain {
     fn subdomains(&self) -> HashSet<String>;

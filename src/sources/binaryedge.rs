@@ -1,5 +1,5 @@
+use crate::error::Result;
 use crate::IntoSubdomain;
-use crate::Result;
 use async_std::task;
 use dotenv::dotenv;
 use serde::Deserialize;

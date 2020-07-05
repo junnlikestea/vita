@@ -1,9 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 struct AnubisResult {
     results: Value,
@@ -26,25 +25,6 @@ impl IntoSubdomain for AnubisResult {
     }
 }
 
-#[derive(Debug)]
-struct AnubisError {
-    host: Arc<String>,
-}
-
-impl AnubisError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for AnubisError {}
-
-impl fmt::Display for AnubisError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "AnubisDB couldn't find any results for: {}", self.host)
-    }
-}
-
 fn build_url(host: &str) -> String {
     format!("https://jldc.me/anubis/subdomains/{}", host)
 }
@@ -60,11 +40,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(AnubisError::new(host)))
+                Err(Error::source_error("AnubisDB", host))
             }
         }
 
-        None => Err(Box::new(AnubisError::new(host))),
+        None => Err(Error::source_error("AnubisDB", host)),
     }
 }
 

@@ -1,12 +1,11 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use dotenv::dotenv;
 use http_types::headers;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 #[derive(Deserialize)]
 struct SpyseResult {
@@ -26,25 +25,6 @@ struct Subdomain {
 impl IntoSubdomain for SpyseResult {
     fn subdomains(&self) -> HashSet<String> {
         self.data.items.iter().map(|i| i.name.to_owned()).collect()
-    }
-}
-
-#[derive(Debug)]
-struct SpyseError {
-    host: Arc<String>,
-}
-
-impl SpyseError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for SpyseError {}
-
-impl fmt::Display for SpyseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Spyse couldn't find any results for: {}", self.host)
     }
 }
 
@@ -73,11 +53,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
             if !subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(SpyseError::new(host)))
+                Err(Error::source_error("Spyse", host))
             }
         }
 
-        None => Err(Box::new(SpyseError::new(host))),
+        None => Err(Error::source_error("Spyse", host)),
     }
 }
 

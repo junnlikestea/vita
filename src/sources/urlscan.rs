@@ -1,14 +1,8 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
-
-#[derive(Deserialize)]
-struct UrlScanResult {
-    results: HashSet<UrlScanPage>,
-}
 
 #[derive(Deserialize, Hash, Eq, PartialEq)]
 struct UrlScanPage {
@@ -20,23 +14,9 @@ struct UrlScanDomain {
     domain: String,
 }
 
-#[derive(Debug)]
-struct UrlScanError {
-    host: Arc<String>,
-}
-
-impl UrlScanError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for UrlScanError {}
-
-impl fmt::Display for UrlScanError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "UrlScan couldn't find any results for: {}", self.host)
-    }
+#[derive(Deserialize)]
+struct UrlScanResult {
+    results: HashSet<UrlScanPage>,
 }
 
 impl IntoSubdomain for UrlScanResult {
@@ -59,14 +39,14 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     match resp {
         Some(d) => {
             let subdomains = d.subdomains();
-            if !subdomains.is_empty() {
+            if subdomains.is_empty() {
                 Ok(subdomains)
             } else {
-                Err(Box::new(UrlScanError::new(host)))
+                Err(Error::source_error("UrlScan", host))
             }
         }
 
-        None => Err(Box::new(UrlScanError::new(host))),
+        None => Err(Error::source_error("UrlScan", host)),
     }
 }
 

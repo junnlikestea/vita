@@ -1,8 +1,7 @@
+use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use crate::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{error::Error, fmt};
 
 const API_ERROR: &str = "error check your search parameter";
 
@@ -25,29 +24,6 @@ impl IntoSubdomain for HackerTarget {
     }
 }
 
-#[derive(Debug)]
-struct HackerTargetError {
-    host: Arc<String>,
-}
-
-impl HackerTargetError {
-    fn new(host: Arc<String>) -> Self {
-        Self { host }
-    }
-}
-
-impl Error for HackerTargetError {}
-
-impl fmt::Display for HackerTargetError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "HackerTarget couldn't find any results for: {}",
-            self.host
-        )
-    }
-}
-
 fn build_url(host: &str) -> String {
     format!("https://api.hackertarget.com/hostsearch/?q={}", host)
 }
@@ -59,7 +35,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     if resp != API_ERROR {
         Ok(HackerTarget::new(resp).subdomains())
     } else {
-        Err(Box::new(HackerTargetError::new(host)))
+        Err(Error::source_error("HackerTarget", host))
     }
 }
 
