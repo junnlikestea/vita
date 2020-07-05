@@ -46,11 +46,9 @@ impl error::Error for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.kind {
-            ErrorKind::SourceError { source, host } => write!(
-                f,
-                "{} couldn't find any results for the host: {}",
-                source, host,
-            ),
+            ErrorKind::SourceError { source, host } => {
+                write!(f, "{} couldn't find any results for: {}", source, host,)
+            }
 
             ErrorKind::FacebookAuthError => write!(
                 f,

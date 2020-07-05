@@ -71,7 +71,7 @@ mod tests {
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
-            "Sublister couldn't find any results for: anVubmxpa2VzdGVh.com"
+            "Sublist3r couldn't find any results for: anVubmxpa2VzdGVh.com"
         );
     }
 }

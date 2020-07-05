@@ -71,7 +71,7 @@ mod tests {
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
-            "Certspotter couldn't find any results for: anVubmxpa2VzdGVh.com"
+            "CertSpotter couldn't find any results for: anVubmxpa2VzdGVh.com"
         );
     }
 }

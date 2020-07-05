@@ -79,7 +79,7 @@ If you hit rate limits or authentication fails, the source will just be ignored 
 
 ### To-do
 * Add more paid sources.
-* Clean up some data stuctures and methods.
+* Write some documentation for the underlying library that Vita uses, and prepare publish to crates.io.
 * Optimise performance further.
 
 ### Disclaimer

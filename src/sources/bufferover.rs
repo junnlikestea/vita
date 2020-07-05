@@ -108,7 +108,7 @@ mod tests {
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
-            "BufferOver couldn't find any results for: anVubmxpa2VzdGVh.com"
+            "BufferOverDns couldn't find any results for: anVubmxpa2VzdGVh.com"
         );
     }
 }
