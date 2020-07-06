@@ -17,13 +17,10 @@ struct Creds {
 impl Creds {
     fn from_env() -> Self {
         dotenv().ok();
-        let key = env::var("PASSIVETOTAL_KEY").expect(
-            "PASSIVETOTAL_KEY\
-        must be set in order to use PassiveTotal as a data source",
-        );
+        let key = env::var("PASSIVETOTAL_KEY")
+            .expect("PASSIVETOTAL_KEY must be set in order to use PassiveTotal as a data source");
         let secret = env::var("PASSIVETOTAL_SECRET").expect(
-            "PASSIVETOTAL_SECRET\
-must be set in order to use PassiveTotal as a data source",
+            "PASSIVETOTAL_SECRET must be set in order to use PassiveTotal as a data source",
         );
 
         Self { key, secret }
@@ -122,6 +119,7 @@ mod tests {
     }
 
     #[async_test]
+    #[ignore]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let res = run(host).await;
