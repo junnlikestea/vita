@@ -12,6 +12,7 @@ name = "vita"
 
 [dependencies]
 surf = "2.0.0-alpha.4"
+base64 = "0.12.3"
 clap = "2.33.1"
 regex = "1.3.9"
 url = "2.1.1"

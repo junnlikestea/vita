@@ -8,6 +8,7 @@ pub mod crtsh;
 pub mod facebook;
 pub mod hackertarget;
 pub mod intelx;
+pub mod passivetotal;
 pub mod securitytrails;
 pub mod spyse;
 pub mod sublister;
