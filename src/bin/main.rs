@@ -9,7 +9,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync 
 
 #[async_std::main]
 async fn main() -> Result<()> {
-    let args = create_clap_app("v0.1.0");
+    let args = create_clap_app("v0.1.3");
     let matches = args.get_matches();
     let mut all_sources = false;
     let mut hosts: Vec<String> = Vec::new();
@@ -28,9 +28,9 @@ async fn main() -> Result<()> {
         hosts = read_stdin()?;
     }
 
+    //TODO: can we avoid making this second vec ?
     let ree_host: Vec<String> = hosts.iter().map(|s| host_regex(&s)).collect();
     let host_regexs = RegexSet::new(&ree_host).unwrap();
-    //let wildcard = Regex::new(r"^\*\.").unwrap();
     let results = vita::runner(hosts, all_sources)
         .await
         .iter()
@@ -47,8 +47,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// Creates the Clap app to use Vita library as a cli tool
 fn create_clap_app(version: &str) -> clap::App {
-    // Add support to not include subdomains.
     App::new("vita")
         .version(version)
         .about("Gather subdomains from passive sources")
@@ -81,11 +81,12 @@ fn read_stdin() -> Result<Vec<String>> {
 }
 
 // builds a regex that filters junk results
+// .*\.host\.com$
 fn host_regex(host: &str) -> String {
-    //possible bug with regex. some output counts seem too filtered.
     let mut prefix = r".*\.".to_owned();
     let h = host.replace(".", r"\.");
     prefix.push_str(&h);
     prefix.push_str("$");
+
     prefix
 }

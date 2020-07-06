@@ -5,7 +5,7 @@ use error::Result;
 use futures::future::BoxFuture;
 use sources::{
     alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, crtsh, facebook, hackertarget,
-    spyse, sublister, threatcrowd, threatminer, urlscan, virustotal, wayback,
+    intelx, spyse, sublister, threatcrowd, threatminer, urlscan, virustotal, wayback,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -72,6 +72,7 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
         Box::pin(facebook::run(Arc::clone(&host))),
         Box::pin(spyse::run(Arc::clone(&host))),
         Box::pin(c99::run(Arc::clone(&host))),
+        Box::pin(intelx::run(Arc::clone(&host))),
         Box::pin(hackertarget::run(host)),
     ];
 
