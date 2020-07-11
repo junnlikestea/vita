@@ -1,0 +1,7 @@
+version: "3"
+services: 
+ vita:
+      build: .
+      image: vita
+      container_name: vita
+      restart: always
