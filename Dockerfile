@@ -5,12 +5,23 @@ WORKDIR vita
 RUN apk add \
         wget\
         tar\
-        gzip
-RUN wget https://github.com/junnlikestea/vita/releases/download/0.1.5/vita-0.1.5-x86_64-unknown-linux-musl.tar.gz 
-RUN tar -xvf vita-0.1.5-x86_64-unknown-linux-musl.tar.gz && \  
-           mv vita-0.1.5-x86_64-unknown-linux-musl/vita . &&\ 
-           rm -rf vita-0.1.5-x86_64-unknown-linux-musl.tar.gz vita-0.1.5-x86_64-unknown-linux-musl
+        gzip\
+        curl\
+        jq
 
+               
+RUN export LATEST_RELEASE=$(curl -s https://api.github.com/repos/junnlikestea/vita/releases/latest | jq -jr .tag_name) &&\
+                wget https://github.com/junnlikestea/vita/releases/download/$LATEST_RELEASE/vita-$LATEST_RELEASE-x86_64-unknown-linux-musl.tar.gz &&\
+                tar -xzvf vita-$LATEST_RELEASE-x86_64-unknown-linux-musl.tar.gz && \  
+                mv vita-$LATEST_RELEASE-x86_64-unknown-linux-musl/vita . &&\ 
+                rm -rf vita-* 
+
+RUN apk del --purge\
+        wget\
+        tar\
+        gzip\
+        jq\
+        curl
 ENV HOME /
 
 CMD ["./vita -d"]
