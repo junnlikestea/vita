@@ -9,13 +9,18 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync 
 
 #[async_std::main]
 async fn main() -> Result<()> {
-    let args = create_clap_app("v0.1.3");
+    let args = create_clap_app("v0.1.6");
     let matches = args.get_matches();
     let mut all_sources = false;
+    let mut exclude_rapidns = false;
     let mut hosts: Vec<String> = Vec::new();
 
     if matches.is_present("all_sources") {
         all_sources = true;
+    }
+
+    if matches.is_present("exclude_rapidns") {
+        exclude_rapidns = true;
     }
 
     if matches.is_present("file") {
@@ -31,18 +36,17 @@ async fn main() -> Result<()> {
     //TODO: can we avoid making this second vec ?
     let ree_host: Vec<String> = hosts.iter().map(|s| host_regex(&s)).collect();
     let host_regexs = RegexSet::new(&ree_host).unwrap();
-    let results = vita::runner(hosts, all_sources)
+
+    vita::runner(hosts, all_sources, exclude_rapidns)
         .await
         .iter()
-        .flat_map(|c| c.split_whitespace())
-        .filter(|a| host_regexs.is_match(&a))
-        .filter(|b| !b.starts_with('*'))
-        .map(|b| b.to_string())
-        .collect::<HashSet<String>>();
-
-    for subdomain in results.iter() {
-        println!("{}", subdomain);
-    }
+        .flat_map(|a| a.split_whitespace())
+        .filter(|b| host_regexs.is_match(&b))
+        .filter(|c| !c.starts_with('*'))
+        .map(|d| d.into())
+        .collect::<HashSet<String>>()
+        .iter()
+        .for_each(|s| println!("{}", s)); // why not e? because s is for subdomain xD
 
     Ok(())
 }
@@ -71,6 +75,12 @@ fn create_clap_app(version: &str) -> clap::App {
                 .help("use sources which require an Api key")
                 .short("a")
                 .long("all"),
+        )
+        .arg(
+            Arg::with_name("exclude_rapidns")
+                .help("exclude using RapidDNS as a source")
+                .short("e")
+                .long("exclude-rapidns"),
         )
 }
 

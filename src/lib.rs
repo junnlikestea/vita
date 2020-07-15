@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate lazy_static;
 pub mod error;
 pub mod sources;
 use async_std::task;
@@ -5,36 +7,39 @@ use error::Result;
 use futures::future::BoxFuture;
 use sources::{
     alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, crtsh, facebook, hackertarget,
-    intelx, passivetotal, spyse, sublister, threatcrowd, threatminer, urlscan, virustotal, wayback,
+    intelx, passivetotal, rapidns, spyse, sublister, threatcrowd, threatminer, urlscan, virustotal,
+    wayback,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
-
-// wrapper result type
 
 trait IntoSubdomain {
     fn subdomains(&self) -> HashSet<String>;
 }
 
 // Collects data from all sources which don't require and API key
-async fn free_sources(host: Arc<String>) -> HashSet<String> {
+async fn free_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String> {
     let mut tasks = Vec::new();
     let mut results = HashSet::new();
-    let sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
-        Box::pin(anubisdb::run(Arc::clone(&host))),
-        Box::pin(alienvault::run(Arc::clone(&host))),
-        Box::pin(bufferover::run(Arc::clone(&host), true)),
-        Box::pin(bufferover::run(Arc::clone(&host), false)),
-        Box::pin(certspotter::run(Arc::clone(&host))),
-        Box::pin(crtsh::run(Arc::clone(&host))),
-        Box::pin(threatcrowd::run(Arc::clone(&host))),
-        Box::pin(urlscan::run(Arc::clone(&host))),
-        Box::pin(virustotal::run(Arc::clone(&host))),
-        Box::pin(threatminer::run(Arc::clone(&host))),
-        Box::pin(sublister::run(Arc::clone(&host))),
-        Box::pin(wayback::run(Arc::clone(&host))),
-        Box::pin(hackertarget::run(host)),
+    let mut sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
+        Box::pin(anubisdb::run(host.clone())),
+        Box::pin(alienvault::run(host.clone())),
+        Box::pin(bufferover::run(host.clone(), true)),
+        Box::pin(bufferover::run(host.clone(), false)),
+        Box::pin(certspotter::run(host.clone())),
+        Box::pin(crtsh::run(host.clone())),
+        Box::pin(threatcrowd::run(host.clone())),
+        Box::pin(urlscan::run(host.clone())),
+        Box::pin(virustotal::run(host.clone())),
+        Box::pin(threatminer::run(host.clone())),
+        Box::pin(sublister::run(host.clone())),
+        Box::pin(wayback::run(host.clone())),
+        Box::pin(hackertarget::run(host.clone())),
     ];
+
+    if !exclude_rapidns {
+        sources.push(Box::pin(rapidns::run(host)));
+    }
 
     for s in sources {
         tasks.push(task::spawn(async { s.await }));
@@ -52,30 +57,34 @@ async fn free_sources(host: Arc<String>) -> HashSet<String> {
 }
 
 // Collects data from all sources
-async fn all_sources(host: Arc<String>) -> HashSet<String> {
+async fn all_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String> {
     let mut tasks = Vec::new();
     let mut results = HashSet::new();
-    let sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
-        Box::pin(anubisdb::run(Arc::clone(&host))),
-        Box::pin(binaryedge::run(Arc::clone(&host))),
-        Box::pin(alienvault::run(Arc::clone(&host))),
-        Box::pin(bufferover::run(Arc::clone(&host), true)),
-        Box::pin(bufferover::run(Arc::clone(&host), false)),
-        Box::pin(certspotter::run(Arc::clone(&host))),
-        Box::pin(crtsh::run(Arc::clone(&host))),
-        Box::pin(threatcrowd::run(Arc::clone(&host))),
-        Box::pin(urlscan::run(Arc::clone(&host))),
-        Box::pin(virustotal::run(Arc::clone(&host))),
-        Box::pin(threatminer::run(Arc::clone(&host))),
-        Box::pin(sublister::run(Arc::clone(&host))),
-        Box::pin(wayback::run(Arc::clone(&host))),
-        Box::pin(facebook::run(Arc::clone(&host))),
-        Box::pin(spyse::run(Arc::clone(&host))),
-        Box::pin(c99::run(Arc::clone(&host))),
-        Box::pin(intelx::run(Arc::clone(&host))),
-        Box::pin(passivetotal::run(Arc::clone(&host))),
-        Box::pin(hackertarget::run(host)),
+    let mut sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
+        Box::pin(anubisdb::run(host.clone())),
+        Box::pin(binaryedge::run(host.clone())),
+        Box::pin(alienvault::run(host.clone())),
+        Box::pin(bufferover::run(host.clone(), true)),
+        Box::pin(bufferover::run(host.clone(), false)),
+        Box::pin(certspotter::run(host.clone())),
+        Box::pin(crtsh::run(host.clone())),
+        Box::pin(threatcrowd::run(host.clone())),
+        Box::pin(urlscan::run(host.clone())),
+        Box::pin(virustotal::run(host.clone())),
+        Box::pin(threatminer::run(host.clone())),
+        Box::pin(sublister::run(host.clone())),
+        Box::pin(wayback::run(host.clone())),
+        Box::pin(facebook::run(host.clone())),
+        Box::pin(spyse::run(host.clone())),
+        Box::pin(c99::run(host.clone())),
+        Box::pin(intelx::run(host.clone())),
+        Box::pin(passivetotal::run(host.clone())),
+        Box::pin(hackertarget::run(host.clone())),
     ];
+
+    if !exclude_rapidns {
+        sources.push(Box::pin(rapidns::run(host)));
+    }
 
     for s in sources {
         tasks.push(task::spawn(async { s.await }));
@@ -93,7 +102,7 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
 }
 
 // Takes a bunch of hosts and collects data on them
-pub async fn runner(hosts: Vec<String>, all: bool) -> Vec<String> {
+pub async fn runner(hosts: Vec<String>, all: bool, exclude_rapidns: bool) -> Vec<String> {
     // the number of root domains to fetch data on at a one time
     const ACTIVE_REQUESTS: usize = 200;
     use futures::stream::StreamExt;
@@ -102,9 +111,9 @@ pub async fn runner(hosts: Vec<String>, all: bool) -> Vec<String> {
         let host = Arc::new(host);
         task::spawn(async move {
             if all {
-                all_sources(host).await
+                all_sources(host, exclude_rapidns).await
             } else {
-                free_sources(host).await
+                free_sources(host, exclude_rapidns).await
             }
         })
     }))
