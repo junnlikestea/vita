@@ -37,11 +37,18 @@ With a list of domains from stdin:
 vita < /path/to/domains.txt
 ```
 
-if you want to include sources which require API keys, add the `-a` or `-all` flag, for example:
+For a large host RapidDNS can slow vita down quite a bit, if you want to exclude
+it from the sources just add the `-e` flag.
+```
+vita -d hackerone.com -e
+```
+
+If you want to include sources which require API keys, add the `-a` or `-all` flag, for example:
 ```
 vita -d hackerone.com -a
 ``` 
 By default it will just ignore services you don't supply keys for.
+
 
 ### Sources
 * C99
@@ -63,6 +70,7 @@ By default it will just ignore services you don't supply keys for.
 * dns.bufferover.run
 * IntelligenceX
 * PassiveTotal
+* RapidDNS
 
 ### How to set your Api Keys
 Add a `.env` file to the tool directory or add the following to your existing `.env` file:
