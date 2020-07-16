@@ -33,9 +33,13 @@ async fn main() -> Result<()> {
         hosts = read_stdin()?;
     }
 
-    //TODO: can we avoid making this second vec ?
-    let ree_host: Vec<String> = hosts.iter().map(|s| host_regex(&s)).collect();
-    let host_regexs = RegexSet::new(&ree_host).unwrap();
+    let host_regexs = RegexSet::new(
+        hosts
+            .iter()
+            .map(|s| host_regex(&s))
+            .collect::<Vec<String>>(),
+    )
+    .unwrap();
 
     vita::runner(hosts, all_sources, exclude_rapidns)
         .await
