@@ -93,10 +93,5 @@ fn read_stdin() -> Result<Vec<String>> {
 // builds a regex that filters junk results
 // .*\.host\.com$
 fn host_regex(host: &str) -> String {
-    let mut prefix = r".*\.".to_owned();
-    let h = host.replace(".", r"\.");
-    prefix.push_str(&h);
-    prefix.push_str("$");
-
-    prefix
+    format!(r".*\.{}$", host.replace(".", r"\."))
 }
