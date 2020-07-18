@@ -4,6 +4,7 @@ pub mod binaryedge;
 pub mod bufferover;
 pub mod c99;
 pub mod certspotter;
+pub mod chaos;
 pub mod crtsh;
 pub mod facebook;
 pub mod hackertarget;

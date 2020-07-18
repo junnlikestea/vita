@@ -112,9 +112,6 @@ mod tests {
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
-        for r in results.iter() {
-            println!("{}", r)
-        }
         assert!(!results.is_empty());
     }
 

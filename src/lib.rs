@@ -6,9 +6,9 @@ use async_std::task;
 use error::Result;
 use futures::future::BoxFuture;
 use sources::{
-    alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, crtsh, facebook, hackertarget,
-    intelx, passivetotal, rapidns, spyse, sublister, threatcrowd, threatminer, urlscan, virustotal,
-    wayback,
+    alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, chaos, crtsh, facebook,
+    hackertarget, intelx, passivetotal, rapidns, spyse, sublister, threatcrowd, threatminer,
+    urlscan, virustotal, wayback,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -80,6 +80,7 @@ async fn all_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String
         Box::pin(intelx::run(host.clone())),
         Box::pin(passivetotal::run(host.clone())),
         Box::pin(hackertarget::run(host.clone())),
+        Box::pin(chaos::run(host.clone())),
     ];
 
     if !exclude_rapidns {
