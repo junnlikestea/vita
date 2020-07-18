@@ -52,6 +52,7 @@ By default it will just ignore services you don't supply keys for.
 
 ### Sources
 * C99
+* ProjectDiscovery Chaos
 * AnubisDB
 * Alienvault
 * Binaryedge - be careful running this on a large host if you have a free license. Vita fetches every page of results.
@@ -76,6 +77,8 @@ By default it will just ignore services you don't supply keys for.
 Add a `.env` file to the tool directory or add the following to your existing `.env` file:
 * Binaryedge:
 	* Needs `BINARYEDGE_TOKEN` set
+* ProjectDiscovery Chaos
+	* Needs `CHAOS_KEY` set
 * Facebook:
 	* Needs `FB_APP_ID` and `FB_APP_SECRET` set.
 * Spyse:
