@@ -57,7 +57,7 @@ mod tests {
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
-        assert!(results.len() > 0);
+        assert!(!results.is_empty());
     }
 
     //Some("WaybackMachine couldn't find results for: anVubmxpa2VzdGVh.com")

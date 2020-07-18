@@ -91,14 +91,14 @@ mod tests {
     async fn dns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host, true).await.unwrap();
-        assert!(results.len() > 1);
+        assert!(!results.is_empty());
     }
 
     #[async_test]
     async fn tls_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host, false).await.unwrap();
-        assert!(results.len() > 1);
+        assert!(!results.is_empty());
     }
 
     #[async_test]

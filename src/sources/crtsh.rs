@@ -45,7 +45,7 @@ mod tests {
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
-        assert!(results.len() > 5);
+        assert!(!results.is_empty());
     }
 
     #[ignore] // tests passing locally but failing on linux ci?
