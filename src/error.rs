@@ -12,7 +12,7 @@ pub struct Error {
 #[derive(Clone, Debug)]
 pub enum ErrorKind {
     SourceError { source: String, host: Arc<String> },
-    FacebookAuthError,
+    AuthError { source: String },
 }
 
 impl Error {
@@ -27,9 +27,10 @@ impl Error {
         })
     }
 
-    pub(crate) fn fb_auth_error() -> Box<Error> {
+    pub(crate) fn auth_error(source: &str) -> Box<Error> {
+        let source = source.to_string();
         Box::new(Error {
-            kind: ErrorKind::FacebookAuthError,
+            kind: ErrorKind::AuthError { source },
         })
     }
 }
@@ -38,7 +39,9 @@ impl error::Error for Error {
     fn description(&self) -> &str {
         match self.kind {
             ErrorKind::SourceError { .. } => "there was an error retrieving data from the source",
-            ErrorKind::FacebookAuthError => "there was an error authenticating to Facebook.",
+            ErrorKind::AuthError { .. } => {
+                "there was an error authenticating or you may have reached rate-limits."
+            }
         }
     }
 }
@@ -49,11 +52,10 @@ impl fmt::Display for Error {
             ErrorKind::SourceError { source, host } => {
                 write!(f, "{} couldn't find any results for: {}", source, host,)
             }
-
-            ErrorKind::FacebookAuthError => write!(
+            ErrorKind::AuthError { source } => write!(
                 f,
-                "Failed to authenticate to the Facebook API\
-            using credentials supplied."
+                "Couldn't authenticate or have hit rate-limits to the {} API",
+                source
             ),
         }
     }

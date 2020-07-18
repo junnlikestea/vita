@@ -1,7 +1,9 @@
+use crate::error::Error;
 use crate::error::Result;
 use crate::IntoSubdomain;
 use async_std::task;
 use dotenv::dotenv;
+use http_types::StatusCode;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
@@ -39,7 +41,7 @@ fn build_url(host: &str, page: Option<i32>) -> String {
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut tasks = Vec::new();
     let mut results: HashSet<String> = HashSet::new();
-    let resp = next_page(&host, None).await;
+    let resp = next_page(host.clone(), None).await?;
     // insert subdomains from first page.
     resp.subdomains()
         .into_iter()
@@ -56,12 +58,12 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
         page += 1;
         tasks.push(task::spawn(
-            async move { next_page(&host, Some(page)).await },
+            async move { next_page(host, Some(page)).await },
         ));
     }
 
     for t in tasks {
-        t.await
+        t.await?
             .subdomains()
             .into_iter()
             .map(|s| results.insert(s))
@@ -71,17 +73,21 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     Ok(results)
 }
 
-async fn next_page(host: &str, page: Option<i32>) -> BinaryEdgeResponse {
+async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeResponse> {
     dotenv().ok();
-    let uri = build_url(host, page);
+    let uri = build_url(&host, page);
     let api_key = env::var("BINARYEDGE_TOKEN")
         .expect("BINARYEDGE_TOKEN must be set in order to use Binaryedge as a data source");
+    let mut resp = surf::get(uri).set_header("X-Key", api_key).await?;
 
-    surf::get(uri)
-        .set_header("X-Key", api_key)
-        .recv_json()
-        .await
-        .unwrap()
+    // Should probably add cleaner match arms, but this will do for now.
+    match resp.status() {
+        StatusCode::Unauthorized | StatusCode::Forbidden => Err(Error::auth_error("BinaryEdge")),
+        _ => {
+            let be: BinaryEdgeResponse = resp.body_json().await?;
+            Ok(be)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -95,6 +101,29 @@ mod tests {
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_string());
         let results = run(host).await.unwrap();
-        assert!(results.len() > 3);
+        assert!(!results.is_empty());
+    }
+
+    #[async_test]
+    #[ignore]
+    async fn handle_no_results() {
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "BinaryEdge couldn't find any results for: anVubmxpa2VzdGVh.com"
+        );
+    }
+
+    #[async_test]
+    async fn handle_auth_error() {
+        let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
+        let res = run(host).await;
+        let e = res.unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "Couldn't authenticate or have hit rate-limits to the BinaryEdge API"
+        );
     }
 }

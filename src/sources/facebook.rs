@@ -40,7 +40,7 @@ impl Credentials {
         if let Some(r) = resp {
             Ok(r.access_token)
         } else {
-            Err(Error::fb_auth_error())
+            Err(Error::auth_error("Facebook"))
         }
     }
 }
