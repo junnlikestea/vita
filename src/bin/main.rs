@@ -1,19 +1,22 @@
 extern crate vita;
 use clap::{App, Arg};
-use regex::RegexSet;
+use regex::RegexSetBuilder;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
+use vita::error::Result;
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
+// The maximum allowed size of a compiled regex.
+const MAX_SIZE: usize = 10485760;
 
 #[async_std::main]
 async fn main() -> Result<()> {
-    let args = create_clap_app("v0.1.6");
+    let args = create_clap_app("v0.1.8");
     let matches = args.get_matches();
     let mut all_sources = false;
     let mut exclude_rapidns = false;
     let mut hosts: Vec<String> = Vec::new();
+    let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
 
     if matches.is_present("all_sources") {
         all_sources = true;
@@ -33,15 +36,18 @@ async fn main() -> Result<()> {
         hosts = read_stdin()?;
     }
 
-    let host_regexs = RegexSet::new(
+    let host_regexs = RegexSetBuilder::new(
         hosts
             .iter()
             .map(|s| host_regex(&s))
             .collect::<Vec<String>>(),
     )
+    .size_limit(MAX_SIZE * 2)
+    .dfa_size_limit(MAX_SIZE * 2)
+    .build()
     .unwrap();
 
-    vita::runner(hosts, all_sources, exclude_rapidns)
+    vita::runner(hosts, all_sources, exclude_rapidns, max_concurrent)
         .await
         .iter()
         .flat_map(|a| a.split_whitespace())
@@ -60,7 +66,7 @@ fn create_clap_app(version: &str) -> clap::App {
     App::new("vita")
         .version(version)
         .about("Gather subdomains from passive sources")
-        .usage("vita <domain.com>")
+        .usage("vita -d <domain.com>")
         .arg(Arg::with_name("input").index(1).required(false))
         .arg(
             Arg::with_name("file")
@@ -85,6 +91,14 @@ fn create_clap_app(version: &str) -> clap::App {
                 .help("exclude using RapidDNS as a source")
                 .short("e")
                 .long("exclude-rapidns"),
+        )
+        .arg(
+            Arg::with_name("concurrency")
+                .help("The number of domains to fetch data for concurrently")
+                .short("c")
+                .long("concurrency")
+                .default_value("200")
+                .takes_value(true),
         )
 }
 

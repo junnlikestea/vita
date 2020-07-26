@@ -18,7 +18,7 @@ trait IntoSubdomain {
     fn subdomains(&self) -> HashSet<String>;
 }
 
-// Collects data from all sources which don't require and API key
+// Collects data from all sources which don't require an API key
 async fn free_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String> {
     let mut tasks = Vec::new();
     let mut results = HashSet::new();
@@ -104,9 +104,12 @@ async fn all_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String
 }
 
 // Takes a bunch of hosts and collects data on them
-pub async fn runner(hosts: Vec<String>, all: bool, exclude_rapidns: bool) -> Vec<String> {
-    // the number of root domains to fetch data on at a one time
-    const ACTIVE_REQUESTS: usize = 200;
+pub async fn runner(
+    hosts: Vec<String>,
+    all: bool,
+    exclude_rapidns: bool,
+    max_concurrent: usize,
+) -> Vec<String> {
     use futures::stream::StreamExt;
 
     let responses = futures::stream::iter(hosts.into_iter().map(|host| {
@@ -119,7 +122,7 @@ pub async fn runner(hosts: Vec<String>, all: bool, exclude_rapidns: bool) -> Vec
             }
         })
     }))
-    .buffer_unordered(ACTIVE_REQUESTS)
+    .buffer_unordered(max_concurrent)
     .collect::<Vec<HashSet<String>>>();
 
     responses.await.into_iter().flatten().collect()

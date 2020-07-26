@@ -32,7 +32,14 @@ impl IntoSubdomain for TlsResult {
         self.items
             .iter()
             .flatten()
-            .map(|s| s.split(',').collect::<Vec<&str>>()[2].to_owned())
+            .map(|s| {
+                let split = s.split(',').collect::<Vec<&str>>();
+                // sometimes the responses have different lengths
+                match split.len() {
+                    3 => split[2].to_owned(),
+                    _ => split[1].to_owned(),
+                }
+            })
             .collect()
     }
 }
