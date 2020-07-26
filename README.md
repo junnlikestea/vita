@@ -69,6 +69,7 @@ By default it will just ignore services you don't supply keys for.
 * Threatminer
 * wayback machine
 * dns.bufferover.run
+* tls.bufferover.run
 * IntelligenceX
 * PassiveTotal
 * RapidDNS
@@ -107,8 +108,12 @@ will panic if this is set to any value other than a positive integer.
 * `ASYNC_STD_THREAD_NAME`: The name that async-std's runtime threads report to the operating system. 
 * The default value is "async-std/runtime".
 
-Currently Vita will limit the search for data to 200 root domains concurrently. If you would like for me to set
-this number as a command line flag, please raise an issue.
+Currently Vita will limit the search for data to 200 root domains concurrently. If you would like to 
+change that limit you can use the `-c` flag:
+
+```
+vita -f /path/to/roots.txt -c 400
+``` 
 
 ### To-do
 * Add more paid sources.
