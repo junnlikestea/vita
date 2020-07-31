@@ -20,8 +20,8 @@ impl Credentials {
 
         if app_id.is_ok() && app_secret.is_ok() {
             Ok(Credentials {
-                app_id: app_id.unwrap(),
-                app_secret: app_secret.unwrap(),
+                app_id: app_id?,
+                app_secret: app_secret?,
             })
         } else {
             Err(Error::auth_error("Facebook credentials"))
