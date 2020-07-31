@@ -13,11 +13,19 @@ struct Credentials {
 }
 
 impl Credentials {
-    pub fn from_env() -> Self {
+    pub fn from_env() -> Result<Self> {
         dotenv().ok();
-        let app_id = env::var("FB_APP_ID").expect("FB_APP_ID must be set");
-        let app_secret = env::var("FB_APP_SECRET").expect("FB_APP_SECRET must be set");
-        Credentials { app_id, app_secret }
+        let app_id = env::var("FB_APP_ID");
+        let app_secret = env::var("FB_APP_SECRET");
+
+        if app_id.is_ok() && app_secret.is_ok() {
+            Ok(Credentials {
+                app_id: app_id.unwrap(),
+                app_secret: app_secret.unwrap(),
+            })
+        } else {
+            Err(Error::auth_error("Facebook credentials"))
+        }
     }
 
     pub async fn authenticate(&self) -> Result<String> {
@@ -73,7 +81,11 @@ fn build_url(host: &str, token: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let access_token = Credentials::from_env().authenticate().await?;
+    let access_token = match Credentials::from_env() {
+        Ok(c) => c.authenticate().await?,
+        Err(_) => return Err(Error::key_error("Facebook")),
+    };
+
     let uri = build_url(&host, &access_token);
     let resp: Option<FacebookResult> = surf::get(uri).recv_json().await?;
 
@@ -95,14 +107,18 @@ mod tests {
         let app_id = env::var("FB_APP_ID").expect("FB_APP_ID must be set");
         let app_secret = env::var("FB_APP_SECRET").expect("FB_APP_SECRET must be set");
         let creds: Credentials = Credentials { app_id, app_secret };
-        assert_eq!(creds, Credentials::from_env());
+        assert_eq!(creds, Credentials::from_env().unwrap());
     }
 
     // Checks if we can authenticate with Facebook.
     #[tokio::test]
     #[ignore]
     async fn auth() {
-        let token = Credentials::from_env().authenticate().await.unwrap();
+        let token = Credentials::from_env()
+            .unwrap()
+            .authenticate()
+            .await
+            .unwrap();
         assert!(token.len() > 1);
     }
 

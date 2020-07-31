@@ -12,13 +12,18 @@ struct Creds {
 }
 
 impl Creds {
-    fn from_env() -> Self {
+    fn from_env() -> Result<Self> {
         dotenv().ok();
-        let api_key = env::var("INTELX_KEY")
-            .expect("INTELX_KEY must be set in order to use Intelx as a data source");
-        let url = env::var("INTELX_URL")
-            .expect("INTELX_URL must be set in order to use Intelx as a data source");
-        Self { url, api_key }
+        let api_key = env::var("INTELX_KEY");
+        let url = env::var("INTELX_URL");
+        if api_key.is_ok() && url.is_ok() {
+            Ok(Self {
+                url: url?,
+                api_key: api_key?,
+            })
+        } else {
+            Err(Error::key_error("Intelx"))
+        }
     }
 }
 
@@ -83,7 +88,11 @@ fn build_url(intelx_url: &str, api_key: &str, querying: bool, search_id: Option<
 }
 
 async fn get_searchid(host: Arc<String>) -> Result<String> {
-    let creds = Creds::from_env();
+    let creds = match Creds::from_env() {
+        Ok(c) => c,
+        Err(e) => return Err(e),
+    };
+
     let query_uri = build_url(&creds.url, &creds.api_key, true, None);
     let body = Query::new(host.to_string());
     let search_id: SearchId = surf::post(query_uri).body_json(&body)?.recv_json().await?;
@@ -92,7 +101,11 @@ async fn get_searchid(host: Arc<String>) -> Result<String> {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let creds = Creds::from_env();
+    let creds = match Creds::from_env() {
+        Ok(c) => c,
+        Err(e) => return Err(e),
+    };
+
     let search_id = get_searchid(host.clone()).await?;
     let uri = build_url(&creds.url, &creds.api_key, false, Some(&search_id));
     let resp: IntelxResults = surf::get(uri).recv_json().await?;

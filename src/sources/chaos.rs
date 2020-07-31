@@ -28,10 +28,11 @@ fn build_url(host: &str) -> String {
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     dotenv().ok();
-    let api_key = env::var("CHAOS_KEY").expect(
-        "CHAOS_KEY must be set in order to use ProjectDiscovery
-    Chaos as a data source",
-    );
+    let api_key = match env::var("CHAOS_KEY") {
+        Ok(key) => key,
+        Err(_) => return Err(Error::key_error("Chaos")),
+    };
+
     let uri = build_url(&host);
     let resp: ChaosResult = surf::get(uri)
         .set_header(AUTHORIZATION, api_key)

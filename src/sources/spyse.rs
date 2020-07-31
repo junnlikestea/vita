@@ -38,8 +38,11 @@ fn build_url(host: &str) -> String {
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     // TODO:// handle pagnation?
     dotenv().ok();
-    let api_token = env::var("SPYSE_TOKEN")
-        .expect("SPYSE_TOKEN must be set in order to use Spyse as a data source");
+    let api_token = match env::var("SPYSE_TOKEN") {
+        Ok(key) => key,
+        Err(_) => return Err(Error::key_error("Spyse")),
+    };
+
     let uri = build_url(&host);
     let resp: Option<SpyseResult> = surf::get(uri)
         .set_header(headers::ACCEPT, "application/json")

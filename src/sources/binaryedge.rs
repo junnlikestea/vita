@@ -75,8 +75,11 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeResponse> {
     dotenv().ok();
     let uri = build_url(&host, page);
-    let api_key = env::var("BINARYEDGE_TOKEN")
-        .expect("BINARYEDGE_TOKEN must be set in order to use Binaryedge as a data source");
+    let api_key = match env::var("BINARYEDGE_TOKEN") {
+        Ok(key) => key,
+        Err(_) => return Err(Error::key_error("binaryedge")),
+    };
+
     let mut resp = surf::get(uri).set_header("X-Key", api_key).await?;
 
     // Should probably add cleaner match arms, but this will do for now.

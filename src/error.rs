@@ -13,6 +13,7 @@ pub struct Error {
 pub enum ErrorKind {
     SourceError { source: String, host: Arc<String> },
     AuthError { source: String },
+    KeyError { source: String },
 }
 
 impl Error {
@@ -33,6 +34,13 @@ impl Error {
             kind: ErrorKind::AuthError { source },
         })
     }
+
+    pub(crate) fn key_error(source: &str) -> Box<Error> {
+        let source = source.to_string();
+        Box::new(Error {
+            kind: ErrorKind::AuthError { source },
+        })
+    }
 }
 
 impl error::Error for Error {
@@ -42,6 +50,7 @@ impl error::Error for Error {
             ErrorKind::AuthError { .. } => {
                 "there was an error authenticating or you may have reached rate-limits."
             }
+            ErrorKind::KeyError { .. } => "error reading environment variable",
         }
     }
 }
@@ -55,6 +64,11 @@ impl fmt::Display for Error {
             ErrorKind::AuthError { source } => write!(
                 f,
                 "Couldn't authenticate or have hit rate-limits to the {} API",
+                source
+            ),
+            ErrorKind::KeyError { source } => write!(
+                f,
+                "Couldn't read environment variables for {}. Check if you have the set.",
                 source
             ),
         }

@@ -35,7 +35,11 @@ fn build_url(host: &str, api_key: &str) -> String {
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     dotenv().ok();
-    let api_key = env::var("C99_KEY").expect("C99_KEY must be set to use C99 as a data source");
+    let api_key = match env::var("C99_KEY") {
+        Ok(key) => key,
+        Err(_) => return Err(Error::key_error("C99")),
+    };
+
     let uri = build_url(&host, &api_key);
     let resp: C99Result = surf::get(uri).recv_json().await?;
     let subdomains = resp.subdomains();

@@ -4,7 +4,6 @@
 
 Vita is a tool to gather subdomains from passive sources much like [tomnomnom's assetfinder](https://github.com/tomnomnom/assetfinder).
 
-[![asciicast](https://asciinema.org/a/ksyBsGHQFEePmPCkm3ulDoPEx.svg)](https://asciinema.org/a/ksyBsGHQFEePmPCkm3ulDoPEx)
 
 ### Installation
 Precompiled binaries for vita are available in the [releases](https://github.com/junnlikestea/vita/releases) tab. Just pick your platform and extract the archive that contains the binary.
@@ -108,6 +107,16 @@ change that limit you can use the `-c` flag:
 ```
 vita -f /path/to/roots.txt -c 400
 ``` 
+
+### Thanks
+[0xatul](https://twitter.com/0xatul) For constant feedback and improvement ideas.
+[TomNomNom](https://twitter.com/TomNomNom) For inspiring me to write and release open source tools.
+[Cgboal](https://twitter.com/CalumBoal) For [SonarSearch](https://github.com/Cgboal/SonarSearch) 
+which is a data source for Vita.
+
+
+Thanks to all the data source providers, and everyone else I can't seem to remember at this point 
+in time. I'll make sure to add you in the future.
 
 ### To-do
 * Add more paid sources.

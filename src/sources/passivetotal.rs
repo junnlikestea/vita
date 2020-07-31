@@ -15,15 +15,18 @@ struct Creds {
 }
 
 impl Creds {
-    fn from_env() -> Self {
+    fn from_env() -> Result<Self> {
         dotenv().ok();
-        let key = env::var("PASSIVETOTAL_KEY")
-            .expect("PASSIVETOTAL_KEY must be set in order to use PassiveTotal as a data source");
-        let secret = env::var("PASSIVETOTAL_SECRET").expect(
-            "PASSIVETOTAL_SECRET must be set in order to use PassiveTotal as a data source",
-        );
-
-        Self { key, secret }
+        let key = env::var("PASSIVETOTAL_KEY");
+        let secret = env::var("PASSIVETOTAL_SECRET");
+        if key.is_ok() && secret.is_ok() {
+            Ok(Self {
+                key: key?,
+                secret: secret?,
+            })
+        } else {
+            Err(Error::key_error("PassiveTotal"))
+        }
     }
 }
 
@@ -62,7 +65,10 @@ fn build_url() -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let creds = Creds::from_env();
+    let creds = match Creds::from_env() {
+        Ok(c) => c,
+        Err(e) => return Err(e),
+    };
     let uri = build_url();
     let basic = basic_auth(&creds.key, Some(&creds.secret));
     let query = Query::new(&host);
