@@ -99,18 +99,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           target: ${{ matrix.arch }}
           override: true
-
-      - name: Rustfmt
-        uses: actions/checkout@master
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.toolchain }}
-        run: rustup component add rustfmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+          components: rustfmt
 
       - name: Build
         uses: actions-rs/cargo@v1
