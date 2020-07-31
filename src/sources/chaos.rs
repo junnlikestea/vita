@@ -49,10 +49,9 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_await_test::async_test;
 
     // Ignore, passed locally.
-    #[async_test]
+    #[tokio::test]
     #[ignore]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
@@ -61,7 +60,7 @@ mod tests {
     }
 
     // Ignore, passed locally.
-    #[async_test]
+    #[tokio::test]
     #[ignore]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());

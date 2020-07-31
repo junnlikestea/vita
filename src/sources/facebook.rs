@@ -86,7 +86,6 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_await_test::async_test;
 
     // checks if we can fetch the credentials from an .env file.
     #[ignore]
@@ -100,7 +99,7 @@ mod tests {
     }
 
     // Checks if we can authenticate with Facebook.
-    #[async_test]
+    #[tokio::test]
     #[ignore]
     async fn auth() {
         let token = Credentials::from_env().authenticate().await.unwrap();
@@ -109,7 +108,7 @@ mod tests {
 
     // Checks to see if the run function returns subdomains
     #[ignore]
-    #[async_test]
+    #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
@@ -119,7 +118,7 @@ mod tests {
     // Checks that if we get no results that we just return an error.
     // test is ignored by default to preserve limits
     #[ignore]
-    #[async_test]
+    #[tokio::test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let res = run(host).await;

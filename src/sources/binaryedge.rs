@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::error::Result;
 use crate::IntoSubdomain;
-use async_std::task;
 use dotenv::dotenv;
 use http_types::StatusCode;
 use serde::Deserialize;
@@ -37,7 +36,7 @@ fn build_url(host: &str, page: Option<i32>) -> String {
 }
 
 // fetches the page in sequential order, it would be better to fetch them concurrently,
-// but for the small amount of pages it probably doesn't matter
+// but for the small amount of pages it probably doesn't matte
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut tasks = Vec::new();
     let mut results: HashSet<String> = HashSet::new();
@@ -57,13 +56,13 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         }
 
         page += 1;
-        tasks.push(task::spawn(
-            async move { next_page(host, Some(page)).await },
-        ));
+        tasks.push(tokio::task::spawn(async move {
+            next_page(host, Some(page)).await
+        }));
     }
 
     for t in tasks {
-        t.await?
+        t.await??
             .subdomains()
             .into_iter()
             .map(|s| results.insert(s))
@@ -93,12 +92,11 @@ async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_await_test::async_test;
 
     // Tests passed locally, ignoring for now.
     // TODO: Add github secret to use ignored tests
     // Checks to see if the run function returns subdomains
-    #[async_test]
+    #[tokio::test]
     #[ignore]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_string());
@@ -106,7 +104,7 @@ mod tests {
         assert!(!results.is_empty());
     }
 
-    #[async_test]
+    #[tokio::test]
     #[ignore]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
@@ -118,7 +116,7 @@ mod tests {
         );
     }
 
-    #[async_test]
+    #[tokio::test]
     #[ignore]
     async fn handle_auth_error() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());

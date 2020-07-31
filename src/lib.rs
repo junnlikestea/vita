@@ -1,14 +1,12 @@
-#[macro_use]
 extern crate lazy_static;
 pub mod error;
 pub mod sources;
 
-use async_std::task;
 use error::Result;
 use futures::future::BoxFuture;
 use sources::{
     alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, chaos, crtsh, facebook,
-    hackertarget, intelx, passivetotal, rapidns, spyse, sublister, threatcrowd, threatminer,
+    hackertarget, intelx, passivetotal, sonarsearch, spyse, sublister, threatcrowd, threatminer,
     urlscan, virustotal, wayback,
 };
 use std::collections::HashSet;
@@ -19,10 +17,10 @@ trait IntoSubdomain {
 }
 
 // Collects data from all sources which don't require an API key
-async fn free_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String> {
+async fn free_sources(host: Arc<String>) -> HashSet<String> {
     let mut tasks = Vec::new();
     let mut results = HashSet::new();
-    let mut sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
+    let sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
         Box::pin(anubisdb::run(host.clone())),
         Box::pin(alienvault::run(host.clone())),
         Box::pin(bufferover::run(host.clone(), true)),
@@ -35,20 +33,18 @@ async fn free_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<Strin
         Box::pin(threatminer::run(host.clone())),
         Box::pin(sublister::run(host.clone())),
         Box::pin(wayback::run(host.clone())),
+        Box::pin(sonarsearch::run(host.clone())),
         Box::pin(hackertarget::run(host.clone())),
     ];
 
-    if !exclude_rapidns {
-        sources.push(Box::pin(rapidns::run(host)));
-    }
-
     for s in sources {
-        tasks.push(task::spawn(async { s.await }));
+        tasks.push(tokio::task::spawn(async { s.await }));
     }
 
     for t in tasks {
         t.await
             .iter()
+            .flatten()
             .flatten()
             .map(|s| results.insert(s.into()))
             .for_each(drop);
@@ -58,10 +54,10 @@ async fn free_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<Strin
 }
 
 // Collects data from all sources
-async fn all_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String> {
+async fn all_sources(host: Arc<String>) -> HashSet<String> {
     let mut tasks = Vec::new();
     let mut results = HashSet::new();
-    let mut sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
+    let sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
         Box::pin(anubisdb::run(host.clone())),
         Box::pin(binaryedge::run(host.clone())),
         Box::pin(alienvault::run(host.clone())),
@@ -81,20 +77,18 @@ async fn all_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String
         Box::pin(intelx::run(host.clone())),
         Box::pin(passivetotal::run(host.clone())),
         Box::pin(hackertarget::run(host.clone())),
+        Box::pin(sonarsearch::run(host.clone())),
         Box::pin(chaos::run(host.clone())),
     ];
 
-    if !exclude_rapidns {
-        sources.push(Box::pin(rapidns::run(host)));
-    }
-
     for s in sources {
-        tasks.push(task::spawn(async { s.await }));
+        tasks.push(tokio::task::spawn(async { s.await }));
     }
 
     for t in tasks {
         t.await
             .iter()
+            .flatten()
             .flatten()
             .map(|s| results.insert(s.into()))
             .for_each(drop);
@@ -104,26 +98,22 @@ async fn all_sources(host: Arc<String>, exclude_rapidns: bool) -> HashSet<String
 }
 
 // Takes a bunch of hosts and collects data on them
-pub async fn runner(
-    hosts: Vec<String>,
-    all: bool,
-    exclude_rapidns: bool,
-    max_concurrent: usize,
-) -> Vec<String> {
+pub async fn runner(hosts: Vec<String>, all: bool, max_concurrent: usize) -> Vec<String> {
     use futures::stream::StreamExt;
 
     let responses = futures::stream::iter(hosts.into_iter().map(|host| {
         let host = Arc::new(host);
-        task::spawn(async move {
+        tokio::task::spawn(async move {
             if all {
-                all_sources(host, exclude_rapidns).await
+                all_sources(host).await
             } else {
-                free_sources(host, exclude_rapidns).await
+                free_sources(host).await
             }
         })
     }))
     .buffer_unordered(max_concurrent)
-    .collect::<Vec<HashSet<String>>>();
+    .collect::<Vec<_>>();
 
-    responses.await.into_iter().flatten().collect()
+    // this might need to be converted to hashset string
+    responses.await.into_iter().flatten().flatten().collect()
 }

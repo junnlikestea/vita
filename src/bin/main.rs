@@ -1,29 +1,21 @@
 extern crate vita;
 use clap::{App, Arg};
-use regex::RegexSetBuilder;
+use regex::{RegexSet, RegexSetBuilder};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
 use vita::error::Result;
 
-// The maximum allowed size of a compiled regex.
-const MAX_SIZE: usize = 10485760;
-
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
-    let args = create_clap_app("v0.1.8");
+    let args = create_clap_app("v0.1.9");
     let matches = args.get_matches();
     let mut all_sources = false;
-    let mut exclude_rapidns = false;
     let mut hosts: Vec<String> = Vec::new();
     let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
 
     if matches.is_present("all_sources") {
         all_sources = true;
-    }
-
-    if matches.is_present("exclude_rapidns") {
-        exclude_rapidns = true;
     }
 
     if matches.is_present("file") {
@@ -36,23 +28,13 @@ async fn main() -> Result<()> {
         hosts = read_stdin()?;
     }
 
-    let host_regexs = RegexSetBuilder::new(
-        hosts
-            .iter()
-            .map(|s| host_regex(&s))
-            .collect::<Vec<String>>(),
-    )
-    .size_limit(MAX_SIZE * 2)
-    .dfa_size_limit(MAX_SIZE * 2)
-    .build()
-    .unwrap();
+    let host_regexs = build_host_regex(&hosts);
 
-    vita::runner(hosts, all_sources, exclude_rapidns, max_concurrent)
+    vita::runner(hosts, all_sources, max_concurrent)
         .await
         .iter()
         .flat_map(|a| a.split_whitespace())
-        .filter(|b| host_regexs.is_match(&b))
-        .filter(|c| !c.starts_with('*'))
+        .filter(|b| host_regexs.is_match(&b) && !b.starts_with('*'))
         .map(|d| d.into())
         .collect::<HashSet<String>>()
         .iter()
@@ -61,7 +43,36 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// Creates the Clap app to use Vita library as a cli tool
+fn read_stdin() -> Result<Vec<String>> {
+    let mut buffer = String::new();
+    io::stdin().read_to_string(&mut buffer)?;
+    Ok(buffer.split_whitespace().map(|s| s.to_string()).collect())
+}
+
+/// Builds a regex that filters irrelevant subdomains from the results.
+/// `.*\.host\.com$`
+fn host_regex(host: &str) -> String {
+    format!(r".*\.{}$", host.replace(".", r"\."))
+}
+
+/// Builds a `RegexSet` to use for filtering irrelevant results.
+fn build_host_regex(hosts: &[String]) -> RegexSet {
+    // The maximum allowed size of a compiled regex.
+    const MAX_SIZE: usize = 10485760;
+
+    RegexSetBuilder::new(
+        hosts
+            .iter()
+            .map(|s| host_regex(&s))
+            .collect::<Vec<String>>(),
+    )
+    .size_limit(MAX_SIZE * 2)
+    .dfa_size_limit(MAX_SIZE * 2)
+    .build()
+    .unwrap()
+}
+
+/// Creates the Clap app to use Vita library as a cli tool
 fn create_clap_app(version: &str) -> clap::App {
     App::new("vita")
         .version(version)
@@ -87,12 +98,6 @@ fn create_clap_app(version: &str) -> clap::App {
                 .long("all"),
         )
         .arg(
-            Arg::with_name("exclude_rapidns")
-                .help("exclude using RapidDNS as a source")
-                .short("e")
-                .long("exclude-rapidns"),
-        )
-        .arg(
             Arg::with_name("concurrency")
                 .help("The number of domains to fetch data for concurrently")
                 .short("c")
@@ -100,16 +105,4 @@ fn create_clap_app(version: &str) -> clap::App {
                 .default_value("200")
                 .takes_value(true),
         )
-}
-
-fn read_stdin() -> Result<Vec<String>> {
-    let mut buffer = String::new();
-    io::stdin().read_to_string(&mut buffer)?;
-    Ok(buffer.split_whitespace().map(|s| s.to_string()).collect())
-}
-
-// builds a regex that filters junk results
-// .*\.host\.com$
-fn host_regex(host: &str) -> String {
-    format!(r".*\.{}$", host.replace(".", r"\."))
 }
