@@ -129,4 +129,3 @@ Developers have/has no responsibility or authority over any kind of:
 * Malicious use capable of causing damage to third parties.
 * Illegal or unlawful use of vita.
 
-Thanks to [0xatul](https://twitter.com/atul_hax) for the feedback!
