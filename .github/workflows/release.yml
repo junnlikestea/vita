@@ -104,6 +104,7 @@ jobs:
         profile: minimal
         override: true
         target: ${{ matrix.target }}
+        components: rustfmt
 
     - name: Use Cross
       # if: matrix.os != 'windows-2019'
