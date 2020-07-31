@@ -1,0 +1,19 @@
+[package]
+name = "crobat"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = {version = "0.3.0", features = ["tls", "transport"]}
+prost = "0.6"
+webpki = "0.21.3"
+webpki-roots = "0.20.0"
+rustls = "0.18.0"
+futures-core = "0.3"
+futures-util = "0.3"
+async-stream = "0.2"
+
+[build-dependencies]
+tonic-build = "0.3"

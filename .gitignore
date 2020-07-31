@@ -1,4 +1,5 @@
 /target
+crobat/target
 Cargo.lock
 .env
 notes.md
