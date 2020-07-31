@@ -19,6 +19,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 mod tests {
     use super::*;
 
+    #[ignore]
     #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
@@ -26,6 +27,7 @@ mod tests {
         assert!(!results.is_empty());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
