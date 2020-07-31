@@ -91,16 +91,6 @@ Add a `.env` file to the tool directory or add the following to your existing `.
 If you hit rate limits or authentication fails, the source will just be ignored from the list of potential sources.
 
 ### A note on tuning the concurrency
-Vita uses Rust's [async-std](https://docs.rs/async-std/1.6.2/async_std/) library under the hood. 
-Several environment variables can be used to tune the performance:
-
-* `ASYNC_STD_THREAD_COUNT`: The number of threads that the async-std runtime will start. By default, 
-this is one per logical cpu. which may be different than the number of physical cpus. Async-std 
-will panic if this is set to any value other than a positive integer.
-
-* `ASYNC_STD_THREAD_NAME`: The name that async-std's runtime threads report to the operating system. 
-* The default value is "async-std/runtime".
-
 Currently Vita will limit the search for data to 200 root domains concurrently. If you would like to 
 change that limit you can use the `-c` flag:
 
