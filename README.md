@@ -37,12 +37,6 @@ With a list of domains from stdin:
 vita < /path/to/domains.txt
 ```
 
-For a large host RapidDNS can slow vita down quite a bit, if you want to exclude
-it from the sources just add the `-e` flag.
-```
-vita -d hackerone.com -e
-```
-
 If you want to include sources which require API keys, add the `-a` or `-all` flag, for example:
 ```
 vita -d hackerone.com -a
@@ -51,11 +45,12 @@ By default it will just ignore services you don't supply keys for.
 
 
 ### Sources
+* SonarSearch
 * C99
 * ProjectDiscovery Chaos
 * AnubisDB
 * Alienvault
-* Binaryedge - be careful running this on a large host if you have a free license. Vita fetches every page of results.
+* Binaryedge 
 * Certspotter
 * Crt.sh
 * Hackertarget
@@ -67,12 +62,11 @@ By default it will just ignore services you don't supply keys for.
 * Urlscan.io
 * Facebook
 * Threatminer
-* wayback machine
+* Wayback Machine
 * dns.bufferover.run
 * tls.bufferover.run
 * IntelligenceX
 * PassiveTotal
-* RapidDNS
 
 ### How to set your Api Keys
 Add a `.env` file to the tool directory or add the following to your existing `.env` file:

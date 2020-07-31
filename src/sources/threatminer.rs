@@ -44,7 +44,6 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_await_test::async_test;
 
     #[test]
     fn url_builder() {
@@ -53,7 +52,7 @@ mod tests {
     }
 
     // Checks to see if the run function returns subdomains
-    #[async_test]
+    #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
         let results = run(host).await.unwrap();
@@ -61,7 +60,7 @@ mod tests {
     }
 
     //Some("WaybackMachine couldn't find results for: anVubmxpa2VzdGVh.com")
-    #[async_test]
+    #[tokio::test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let res = run(host).await;

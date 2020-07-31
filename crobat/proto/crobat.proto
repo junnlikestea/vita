@@ -1,3 +1,5 @@
+// Source @Cgboal
+// https://github.com/Cgboal/SonarSearch/blob/master/proto/crobat.proto
 syntax = "proto3";
 
 package proto;
