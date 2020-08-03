@@ -6,6 +6,20 @@ use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
 
+struct Creds {
+    key: String,
+}
+
+impl Creds {
+    pub fn read_creds() -> Result<Self> {
+        dotenv().ok();
+        match env::var("C99_KEY") {
+            Ok(key) => Ok(Self { key }),
+            Err(_) => Err(Error::key_error("C99", &["C99_KEY"])),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct C99Result {
     subdomains: Option<Vec<C99Item>>,
@@ -34,10 +48,9 @@ fn build_url(host: &str, api_key: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    dotenv().ok();
-    let api_key = match env::var("C99_KEY") {
-        Ok(key) => key,
-        Err(_) => return Err(Error::key_error("C99")),
+    let api_key = match Creds::read_creds() {
+        Ok(creds) => creds.key,
+        Err(e) => return Err(e),
     };
 
     let uri = build_url(&host, &api_key);

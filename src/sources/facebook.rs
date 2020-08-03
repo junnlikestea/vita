@@ -7,24 +7,27 @@ use std::env;
 use std::sync::Arc;
 
 #[derive(Debug, PartialEq)]
-struct Credentials {
+struct Creds {
     app_id: String,
     app_secret: String,
 }
 
-impl Credentials {
-    pub fn from_env() -> Result<Self> {
+impl Creds {
+    pub fn read_creds() -> Result<Self> {
         dotenv().ok();
         let app_id = env::var("FB_APP_ID");
         let app_secret = env::var("FB_APP_SECRET");
 
         if app_id.is_ok() && app_secret.is_ok() {
-            Ok(Credentials {
+            Ok(Self {
                 app_id: app_id?,
                 app_secret: app_secret?,
             })
         } else {
-            Err(Error::auth_error("Facebook credentials"))
+            Err(Error::key_error(
+                "Facebook",
+                &["FB_APP_ID", "FB_APP_SECRET"],
+            ))
         }
     }
 
@@ -81,9 +84,14 @@ fn build_url(host: &str, token: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let access_token = match Credentials::from_env() {
+    let access_token = match Creds::read_creds() {
         Ok(c) => c.authenticate().await?,
-        Err(_) => return Err(Error::key_error("Facebook")),
+        Err(_) => {
+            return Err(Error::key_error(
+                "Facebook",
+                &["FB_APP_ID", "FB_APP_SECRET"],
+            ))
+        }
     };
 
     let uri = build_url(&host, &access_token);
@@ -104,21 +112,25 @@ mod tests {
     #[test]
     fn get_creds() {
         dotenv().ok();
-        let app_id = env::var("FB_APP_ID").expect("FB_APP_ID must be set");
-        let app_secret = env::var("FB_APP_SECRET").expect("FB_APP_SECRET must be set");
-        let creds: Credentials = Credentials { app_id, app_secret };
-        assert_eq!(creds, Credentials::from_env().unwrap());
+        let app_id = env::var("FB_APP_ID").unwrap();
+        let app_secret = env::var("FB_APP_SECRET").unwrap();
+        let creds: Creds = Creds { app_id, app_secret };
+        assert_eq!(creds, Creds::read_creds().unwrap());
+    }
+
+    #[test]
+    fn get_no_creds() {
+        let creds = Creds::read_creds();
+        let e = creds.unwrap_err();
+        let correct_msg = r#"Couldn't read ["FB_APP_ID", "FB_APP_SECRET"] for Facebook. Check if you have them set."#;
+        assert_eq!(e.to_string(), correct_msg);
     }
 
     // Checks if we can authenticate with Facebook.
-    #[tokio::test]
     #[ignore]
+    #[tokio::test]
     async fn auth() {
-        let token = Credentials::from_env()
-            .unwrap()
-            .authenticate()
-            .await
-            .unwrap();
+        let token = Creds::read_creds().unwrap().authenticate().await.unwrap();
         assert!(token.len() > 1);
     }
 

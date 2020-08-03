@@ -6,6 +6,20 @@ use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
 
+struct Creds {
+    api_key: String,
+}
+
+impl Creds {
+    pub fn read_creds() -> Result<Self> {
+        dotenv().ok();
+        match env::var("SECURITY_TRAILS_KEY") {
+            Ok(api_key) => Ok(Self { api_key }),
+            Err(_) => Err(Error::key_error("SecurityTrails", &["SECURITY_TRAILS_KEY"])),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct SecTrailsResult {
     subdomains: Vec<String>,
@@ -30,10 +44,12 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    dotenv().ok();
-    let api_key = env::var("SECURITY_TRAILS_KEY")
-        .expect("SECURITY_TRAILS_KEY must be set to use SecurityTrails API");
     let uri = build_url(&host);
+    let api_key = match Creds::read_creds() {
+        Ok(creds) => creds.api_key,
+        Err(e) => return Err(e),
+    };
+
     let resp: Option<SecTrailsResult> = surf::get(uri)
         .set_header("apikey", api_key)
         .recv_json()
@@ -72,6 +88,7 @@ mod tests {
         assert!(!results.is_empty());
     }
 
+    // TODO: Test assumes credentials from env are valid.
     #[ignore]
     #[tokio::test]
     async fn handle_no_results() {

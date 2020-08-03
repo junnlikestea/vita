@@ -25,7 +25,10 @@ impl Creds {
                 secret: secret?,
             })
         } else {
-            Err(Error::key_error("PassiveTotal"))
+            Err(Error::key_error(
+                "PassiveTotal",
+                &["PASSIVETOTAL_KEY", "PASSIVETOTAL_SECRET"],
+            ))
         }
     }
 }

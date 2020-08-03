@@ -12,17 +12,18 @@ struct Creds {
 }
 
 impl Creds {
-    fn from_env() -> Result<Self> {
+    fn read_creds() -> Result<Self> {
         dotenv().ok();
         let api_key = env::var("INTELX_KEY");
         let url = env::var("INTELX_URL");
+
         if api_key.is_ok() && url.is_ok() {
             Ok(Self {
                 url: url?,
                 api_key: api_key?,
             })
         } else {
-            Err(Error::key_error("Intelx"))
+            Err(Error::key_error("Intelx", &["INTELX_URL", "INTELX_KEY"]))
         }
     }
 }
@@ -88,7 +89,7 @@ fn build_url(intelx_url: &str, api_key: &str, querying: bool, search_id: Option<
 }
 
 async fn get_searchid(host: Arc<String>) -> Result<String> {
-    let creds = match Creds::from_env() {
+    let creds = match Creds::read_creds() {
         Ok(c) => c,
         Err(e) => return Err(e),
     };
@@ -101,8 +102,8 @@ async fn get_searchid(host: Arc<String>) -> Result<String> {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    let creds = match Creds::from_env() {
-        Ok(c) => c,
+    let creds = match Creds::read_creds() {
+        Ok(creds) => creds,
         Err(e) => return Err(e),
     };
 

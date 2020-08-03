@@ -7,6 +7,20 @@ use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
 
+struct Creds {
+    key: String,
+}
+
+impl Creds {
+    pub fn read_creds() -> Result<Self> {
+        dotenv().ok();
+        match env::var("CHAOS_KEY") {
+            Ok(key) => Ok(Self { key }),
+            Err(_) => Err(Error::key_error("Chaos", &["CHAOS_KEY"])),
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 struct ChaosResult {
     domain: String,
@@ -27,10 +41,9 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    dotenv().ok();
-    let api_key = match env::var("CHAOS_KEY") {
-        Ok(key) => key,
-        Err(_) => return Err(Error::key_error("Chaos")),
+    let api_key = match Creds::read_creds() {
+        Ok(creds) => creds.key,
+        Err(e) => return Err(e),
     };
 
     let uri = build_url(&host);

@@ -11,9 +11,17 @@ pub struct Error {
 
 #[derive(Clone, Debug)]
 pub enum ErrorKind {
-    SourceError { source: String, host: Arc<String> },
-    AuthError { source: String },
-    KeyError { source: String },
+    SourceError {
+        source: String,
+        host: Arc<String>,
+    },
+    AuthError {
+        source: String,
+    },
+    KeyError {
+        source: String,
+        env_variables: Vec<String>,
+    },
 }
 
 impl Error {
@@ -35,10 +43,14 @@ impl Error {
         })
     }
 
-    pub(crate) fn key_error(source: &str) -> Box<Error> {
+    pub(crate) fn key_error(source: &str, envs: &[&str]) -> Box<Error> {
         let source = source.to_string();
+        let env_variables = envs.iter().map(|s| s.to_string()).collect();
         Box::new(Error {
-            kind: ErrorKind::AuthError { source },
+            kind: ErrorKind::KeyError {
+                source,
+                env_variables,
+            },
         })
     }
 }
@@ -50,7 +62,7 @@ impl error::Error for Error {
             ErrorKind::AuthError { .. } => {
                 "there was an error authenticating or you may have reached rate-limits."
             }
-            ErrorKind::KeyError { .. } => "error reading environment variable",
+            ErrorKind::KeyError { .. } => "error reading environment variables",
         }
     }
 }
@@ -63,13 +75,16 @@ impl fmt::Display for Error {
             }
             ErrorKind::AuthError { source } => write!(
                 f,
-                "Couldn't authenticate or have hit rate-limits to the {} API",
+                "Couldn't authenticate or have hit rate-limits for {}",
                 source
             ),
-            ErrorKind::KeyError { source } => write!(
+            ErrorKind::KeyError {
+                source,
+                env_variables,
+            } => write!(
                 f,
-                "Couldn't read environment variables for {}. Check if you have the set.",
-                source
+                "Couldn't read {:?} for {}. Check if you have them set.",
+                env_variables, source
             ),
         }
     }

@@ -7,6 +7,20 @@ use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
 
+struct Creds {
+    token: String,
+}
+
+impl Creds {
+    pub fn read_creds() -> Result<Self> {
+        dotenv().ok();
+        match env::var("SPYSE_TOKEN") {
+            Ok(token) => Ok(Self { token }),
+            Err(_) => Err(Error::key_error("Spyse", &["SPYSE_TOKEN"])),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct SpyseResult {
     data: SpyseItem,
@@ -36,17 +50,15 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
-    // TODO:// handle pagnation?
-    dotenv().ok();
-    let api_token = match env::var("SPYSE_TOKEN") {
-        Ok(key) => key,
-        Err(_) => return Err(Error::key_error("Spyse")),
+    let token = match Creds::read_creds() {
+        Ok(creds) => creds.token,
+        Err(e) => return Err(e),
     };
 
     let uri = build_url(&host);
     let resp: Option<SpyseResult> = surf::get(uri)
         .set_header(headers::ACCEPT, "application/json")
-        .set_header(headers::AUTHORIZATION, format!("Bearer {}", api_token))
+        .set_header(headers::AUTHORIZATION, format!("Bearer {}", token))
         .recv_json()
         .await?;
 

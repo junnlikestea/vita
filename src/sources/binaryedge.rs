@@ -8,6 +8,20 @@ use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
 
+struct Creds {
+    token: String,
+}
+
+impl Creds {
+    pub fn read_creds() -> Result<Self> {
+        dotenv().ok();
+        match env::var("BINARYEDGE_TOKEN") {
+            Ok(token) => Ok(Self { token }),
+            Err(_) => Err(Error::key_error("BinaryEdge", &["BINARYEDGE_TOKEN"])),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct BinaryEdgeResponse {
     page: i32,
@@ -73,14 +87,14 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 }
 
 async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeResponse> {
-    dotenv().ok();
     let uri = build_url(&host, page);
-    let api_key = match env::var("BINARYEDGE_TOKEN") {
-        Ok(key) => key,
-        Err(_) => return Err(Error::key_error("binaryedge")),
+
+    let token = match Creds::read_creds() {
+        Ok(creds) => creds.token,
+        Err(e) => return Err(e),
     };
 
-    let mut resp = surf::get(uri).set_header("X-Key", api_key).await?;
+    let mut resp = surf::get(uri).set_header("X-Key", token).await?;
 
     // Should probably add cleaner match arms, but this will do for now.
     match resp.status() {
