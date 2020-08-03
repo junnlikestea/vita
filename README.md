@@ -100,9 +100,14 @@ vita -f /path/to/roots.txt -c 400
 
 ### Thanks
 [0xatul](https://twitter.com/0xatul) For constant feedback and improvement ideas.
+
 [TomNomNom](https://twitter.com/TomNomNom) For inspiring me to write and release open source tools.
+
 [Cgboal](https://twitter.com/CalumBoal) For [SonarSearch](https://github.com/Cgboal/SonarSearch) 
-which is a data source for Vita.
+which is a data source for Vita. 
+
+[ProjectDiscovery](https://chaos.projectdiscovery.io/#/) For Chaos which is a great data source.
+
 
 
 Thanks to all the data source providers, and everyone else I can't seem to remember at this point 
