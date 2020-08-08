@@ -62,8 +62,6 @@ By default it will just ignore services you don't supply keys for.
 * Facebook
 * Threatminer
 * Wayback Machine
-* dns.bufferover.run
-* tls.bufferover.run
 * IntelligenceX
 * PassiveTotal
 
