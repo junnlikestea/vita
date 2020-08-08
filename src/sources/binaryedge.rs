@@ -2,11 +2,11 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::IntoSubdomain;
 use dotenv::dotenv;
+use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
 
 struct Creds {
     token: String,
@@ -51,10 +51,11 @@ fn build_url(host: &str, page: Option<i32>) -> String {
 
 // fetches the page in sequential order, it would be better to fetch them concurrently,
 // but for the small amount of pages it probably doesn't matte
-pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     let mut tasks = Vec::new();
     let mut results: HashSet<String> = HashSet::new();
-    let resp = next_page(host.clone(), None).await?;
+    let resp = next_page(client.clone(), host.clone(), None).await?;
+
     // insert subdomains from first page.
     resp.subdomains()
         .into_iter()
@@ -64,6 +65,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
     loop {
         let host = host.clone();
+        let client = client.clone();
 
         if page > 0 && page * resp.pagesize >= resp.total {
             break;
@@ -71,7 +73,7 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
         page += 1;
         tasks.push(tokio::task::spawn(async move {
-            next_page(host, Some(page)).await
+            next_page(client, host, Some(page)).await
         }));
     }
 
@@ -86,13 +88,13 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     Ok(results)
 }
 
-async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeResponse> {
+async fn next_page(
+    client: Client,
+    host: Arc<String>,
+    page: Option<i32>,
+) -> Result<BinaryEdgeResponse> {
     trace!("fetching a page from binaryedge for: {}", &host);
     let uri = build_url(&host, page);
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(10))
-        .pool_idle_timeout(Duration::from_secs(4))
-        .build()?;
 
     let token = match Creds::read_creds() {
         Ok(creds) => creds.token,
@@ -115,6 +117,8 @@ async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeRes
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
+    use std::time::Duration;
 
     // Tests passed locally, ignoring for now.
     // TODO: Add github secret to use ignored tests
@@ -123,7 +127,8 @@ mod tests {
     #[ignore]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_string());
-        let results = run(host).await.unwrap();
+        let client = client!();
+        let results = run(client, host).await.unwrap();
         assert!(!results.is_empty());
     }
 
@@ -131,7 +136,8 @@ mod tests {
     #[ignore]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
@@ -143,7 +149,8 @@ mod tests {
     #[ignore]
     async fn handle_auth_error() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

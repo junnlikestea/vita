@@ -1,11 +1,11 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use dotenv::dotenv;
+use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
 
 struct Creds {
     api_key: String,
@@ -44,20 +44,15 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     trace!("fetching data from securitytrails for: {}", &host);
 
-    let uri = build_url(&host);
     let api_key = match Creds::read_creds() {
         Ok(creds) => creds.api_key,
         Err(e) => return Err(e),
     };
 
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(10))
-        .pool_idle_timeout(Duration::from_secs(4))
-        .build()?;
-
+    let uri = build_url(&host);
     let resp: Option<SecTrailsResult> = client
         .get(&uri)
         .header("apikey", api_key)
@@ -84,6 +79,8 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
+    use std::time::Duration;
 
     #[test]
     fn url_builder() {
@@ -96,7 +93,8 @@ mod tests {
     #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
-        let results = run(host).await.unwrap();
+        let client = client!();
+        let results = run(client, host).await.unwrap();
         assert!(!results.is_empty());
     }
 
@@ -105,7 +103,8 @@ mod tests {
     #[tokio::test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

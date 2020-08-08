@@ -4,11 +4,10 @@ use regex::{RegexSet, RegexSetBuilder};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
-use tokio::runtime::Runtime;
-
 use vita::error::Result;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     pretty_env_logger::init();
     let args = create_clap_app("v0.1.9");
     let matches = args.get_matches();
@@ -32,20 +31,16 @@ fn main() -> Result<()> {
 
     let host_regexs = build_host_regex(&hosts);
 
-    let mut runtime = Runtime::new().unwrap();
-    runtime.block_on(async move {
-        vita::runner(hosts, all_sources, max_concurrent)
-            .await
-            .iter()
-            .flat_map(|a| a.split_whitespace())
-            .filter(|b| host_regexs.is_match(&b) && !b.starts_with('*'))
-            .map(|d| d.into())
-            .collect::<HashSet<String>>()
-            .iter()
-            .for_each(|s| println!("{}", s)); // why not e? because s is for subdomain xD
-    });
+    vita::runner(hosts, all_sources, max_concurrent)
+        .await
+        .iter()
+        .flat_map(|a| a.split_whitespace())
+        .filter(|b| host_regexs.is_match(&b) && !b.starts_with('*'))
+        .map(|d| d.into())
+        .collect::<HashSet<String>>()
+        .iter()
+        .for_each(|s| println!("{}", s)); // why not e? because s is for subdomain xD
 
-    runtime.shutdown_background();
     Ok(())
 }
 

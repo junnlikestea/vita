@@ -1,11 +1,11 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use dotenv::dotenv;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
 
 struct Creds {
     url: String,
@@ -89,18 +89,13 @@ fn build_url(intelx_url: &str, api_key: &str, querying: bool, search_id: Option<
     }
 }
 
-async fn get_searchid(host: Arc<String>) -> Result<String> {
+async fn get_searchid(client: Client, host: Arc<String>) -> Result<String> {
     trace!("getting intelx searchid");
 
     let creds = match Creds::read_creds() {
         Ok(c) => c,
         Err(e) => return Err(e),
     };
-
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(10))
-        .pool_idle_timeout(Duration::from_secs(4))
-        .build()?;
 
     let query_uri = build_url(&creds.url, &creds.api_key, true, None);
     let body = Query::new(host.to_string());
@@ -116,18 +111,18 @@ async fn get_searchid(host: Arc<String>) -> Result<String> {
     Ok(search_id.id)
 }
 
-pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     trace!("fetching data from intelx for: {}", &host);
     let creds = match Creds::read_creds() {
         Ok(creds) => creds,
         Err(e) => return Err(e),
     };
 
-    let search_id = get_searchid(host.clone()).await?;
+    let search_id = get_searchid(client.clone(), host.clone()).await?;
     let uri = build_url(&creds.url, &creds.api_key, false, Some(&search_id));
-    let resp: IntelxResults = reqwest::get(&uri).await?.json().await?;
-    debug!("intelx response: {:?}", &resp);
+    let resp: IntelxResults = client.get(&uri).send().await?.json().await?;
     let subdomains = resp.subdomains();
+    debug!("intelx response: {:?}", &resp);
 
     if !subdomains.is_empty() {
         Ok(subdomains)
@@ -139,14 +134,16 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
+    use std::time::Duration;
 
     #[tokio::test]
     #[ignore]
     async fn search_id() {
         let host = Arc::new("hackerone.com".to_owned());
-        let id = get_searchid(host).await.unwrap();
-        println!("{}", &id);
-        assert!(id.len() > 0)
+        let client = client!();
+        let id = get_searchid(client, host).await.unwrap();
+        assert!(!id.is_empty())
     }
 
     // Checks to see if the run function returns subdomains
@@ -154,7 +151,8 @@ mod tests {
     #[ignore]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
-        let results = run(host).await.unwrap();
+        let client = client!();
+        let results = run(client, host).await.unwrap();
         assert!(!results.is_empty());
     }
 
@@ -162,7 +160,8 @@ mod tests {
     #[ignore]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

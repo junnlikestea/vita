@@ -1,9 +1,9 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
+use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
 struct ThreatCrowdResult {
@@ -27,15 +27,9 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     trace!("fetching data from threatcrowd for: {}", &host);
     let uri = build_url(&host);
-
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(10))
-        .pool_idle_timeout(Duration::from_secs(4))
-        .build()?;
-
     let resp: ThreatCrowdResult = client.get(&uri).send().await?.json().await?;
     let subdomains = resp.subdomains();
 
@@ -50,18 +44,22 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
-        let results = run(host).await.unwrap();
+        let client = client!();
+        let results = run(client, host).await.unwrap();
         assert!(!results.is_empty());
     }
 
     #[tokio::test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

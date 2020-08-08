@@ -1,15 +1,12 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
-use base64::write::EncoderWriter as Base64Encoder;
 use dotenv::dotenv;
 use reqwest::header::ACCEPT;
-
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
-use std::io::Write;
 use std::sync::Arc;
-use std::time::Duration;
 
 struct Creds {
     key: String,
@@ -69,7 +66,7 @@ fn build_url() -> String {
     "https://api.passivetotal.org/v2/enrichment/subdomains".to_string()
 }
 
-pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     trace!("fetching data from passivetotal for: {}", &host);
     let creds = match Creds::from_env() {
         Ok(c) => c,
@@ -78,11 +75,6 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
     let uri = build_url();
     let query = Query::new(&host);
-
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(10))
-        .pool_idle_timeout(Duration::from_secs(4))
-        .build()?;
     let resp: PassiveTotalResult = client
         .get(&uri)
         .basic_auth(&creds.key, Some(&creds.secret))
@@ -107,31 +99,19 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     }
 }
 
-// A method to create a basic authenticaiton header, because surf doesn't have one :(
-// https://docs.rs/reqwest/0.10.6/src/reqwest/async_impl/request.rs.html#196-212
-fn basic_auth(username: &str, password: Option<&str>) -> String {
-    use std::str;
-    let mut header_value = b"Basic ".to_vec();
-    {
-        let mut encoder = Base64Encoder::new(&mut header_value, base64::STANDARD);
-        write!(encoder, "{}:", username).unwrap();
-        if let Some(password) = password {
-            write!(encoder, "{}", password).unwrap();
-        }
-    }
-    str::from_utf8(&header_value).unwrap().to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
+    use std::time::Duration;
 
     // Checks to see if the run function returns subdomains
     #[tokio::test]
     #[ignore]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
-        let results = run(host).await.unwrap();
+        let client = client!();
+        let results = run(client, host).await.unwrap();
         assert!(!results.is_empty());
     }
 
@@ -139,7 +119,8 @@ mod tests {
     #[ignore]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

@@ -1,11 +1,11 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use dotenv::dotenv;
+use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
 
 #[derive(Debug, PartialEq)]
 struct Creds {
@@ -32,7 +32,7 @@ impl Creds {
         }
     }
 
-    pub async fn authenticate(&self) -> Result<String> {
+    pub async fn authenticate(&self, client: Client) -> Result<String> {
         // created a struct because deserializing into a serde_json::Value
         // was returning the access token with quotation marks"tokeninhere"
         // but wasn't doing that as a struct.
@@ -47,7 +47,7 @@ impl Creds {
             self.app_id, self.app_secret
         );
 
-        let resp: Option<AuthResp> = reqwest::get(&auth_url).await?.json().await?;
+        let resp: Option<AuthResp> = client.get(&auth_url).send().await?.json().await?;
 
         if let Some(r) = resp {
             Ok(r.access_token)
@@ -84,9 +84,9 @@ fn build_url(host: &str, token: &str) -> String {
     )
 }
 
-pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     let access_token = match Creds::read_creds() {
-        Ok(c) => c.authenticate().await?,
+        Ok(c) => c.authenticate(client.clone()).await?,
         Err(_) => {
             return Err(Error::key_error(
                 "Facebook",
@@ -95,10 +95,6 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         }
     };
 
-    let client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_secs(10))
-        .pool_idle_timeout(Duration::from_secs(4))
-        .build()?;
     let uri = build_url(&host, &access_token);
     let resp: Option<FacebookResult> = client.get(&uri).send().await?.json().await?;
 
@@ -111,6 +107,8 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
+    use std::time::Duration;
 
     // checks if we can fetch the credentials from an .env file.
     #[ignore]
@@ -135,7 +133,12 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn auth() {
-        let token = Creds::read_creds().unwrap().authenticate().await.unwrap();
+        let client = client!();
+        let token = Creds::read_creds()
+            .unwrap()
+            .authenticate(client)
+            .await
+            .unwrap();
         assert!(token.len() > 1);
     }
 
@@ -144,7 +147,8 @@ mod tests {
     #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
-        let results = run(host).await.unwrap();
+        let client = client!();
+        let results = run(client, host).await.unwrap();
         assert!(!results.is_empty());
     }
 
@@ -154,7 +158,8 @@ mod tests {
     #[tokio::test]
     async fn handle_no_results() {
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = run(host).await;
+        let client = client!();
+        let res = run(client, host).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
