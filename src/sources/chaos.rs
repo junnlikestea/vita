@@ -73,7 +73,7 @@ mod tests {
     use std::time::Duration;
 
     // Ignore, passed locally.
-    // #[ignore]
+    #[ignore]
     #[tokio::test]
     async fn returns_results() {
         let host = Arc::new("hackerone.com".to_owned());
