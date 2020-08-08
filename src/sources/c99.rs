@@ -52,10 +52,7 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     trace!("fetching data from C99 for: {}", &host);
     let api_key = match Creds::read_creds() {
         Ok(creds) => creds.key,
-        Err(e) => {
-            error!("{}", &e);
-            return Err(e);
-        }
+        Err(e) => return Err(e),
     };
 
     let uri = build_url(&host, &api_key);

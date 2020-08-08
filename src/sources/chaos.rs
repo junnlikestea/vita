@@ -76,12 +76,8 @@ mod tests {
     // #[ignore]
     #[tokio::test]
     async fn returns_results() {
-        let host = Arc::new("yahoo.com".to_owned());
+        let host = Arc::new("hackerone.com".to_owned());
         let results = run(client!(), host).await.unwrap();
-        for r in results.iter() {
-            println!("{}", r);
-        }
-        println!("# of results:{}", results.len());
         assert!(!results.is_empty());
     }
 

@@ -2,7 +2,6 @@ extern crate lazy_static;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
-pub mod client;
 pub mod error;
 pub mod sources;
 
