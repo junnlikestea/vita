@@ -3,8 +3,9 @@ use crate::IntoSubdomain;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct CertSpotterResult {
     dns_names: Vec<String>,
 }
@@ -27,8 +28,15 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from certspotter for: {}", &host);
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
     let uri = build_url(&host);
-    let resp: Option<Vec<CertSpotterResult>> = surf::get(uri).recv_json().await?;
+    let resp: Option<Vec<CertSpotterResult>> = client.get(&uri).send().await?.json().await?;
+    debug!("certspotter response: {:?}", &resp);
 
     match resp {
         Some(data) => {

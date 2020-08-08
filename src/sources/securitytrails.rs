@@ -5,6 +5,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     api_key: String,
@@ -20,7 +21,7 @@ impl Creds {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct SecTrailsResult {
     subdomains: Vec<String>,
     #[serde(skip)]
@@ -44,16 +45,27 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from securitytrails for: {}", &host);
+
     let uri = build_url(&host);
     let api_key = match Creds::read_creds() {
         Ok(creds) => creds.api_key,
         Err(e) => return Err(e),
     };
 
-    let resp: Option<SecTrailsResult> = surf::get(uri)
-        .set_header("apikey", api_key)
-        .recv_json()
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
+    let resp: Option<SecTrailsResult> = client
+        .get(&uri)
+        .header("apikey", api_key)
+        .send()
+        .await?
+        .json()
         .await?;
+    debug!("securitytrails response: {:?}", &resp);
 
     match resp {
         Some(d) => {

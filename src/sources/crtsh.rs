@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Deserialize, Hash, PartialEq, Debug, Eq)]
 struct CrtshResult {
@@ -20,8 +21,15 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from crt.sh for: {}", &host);
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
     let uri = build_url(&host);
-    let resp: Option<Vec<CrtshResult>> = surf::get(uri).recv_json().await?;
+    let resp: Option<Vec<CrtshResult>> = client.get(&uri).send().await?.json().await?;
+    debug!("crt.sh response: {:?}", &resp);
 
     match resp {
         Some(data) => Ok(data.subdomains()),

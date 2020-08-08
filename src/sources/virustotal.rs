@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Deserialize)]
 struct Subdomain {
@@ -35,8 +36,14 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from virustotal for: {}", &host);
     let uri = build_url(&host);
-    let resp: VirustotalResult = surf::get(uri).recv_json().await?;
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
+    let resp: VirustotalResult = client.get(&uri).send().await?.json().await?;
     let subdomains = resp.subdomains();
 
     if !subdomains.is_empty() {

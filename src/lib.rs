@@ -1,13 +1,16 @@
 extern crate lazy_static;
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 pub mod error;
 pub mod sources;
 
 use error::Result;
 use futures::future::BoxFuture;
 use sources::{
-    alienvault, anubisdb, binaryedge, bufferover, c99, certspotter, chaos, crtsh, facebook,
-    hackertarget, intelx, passivetotal, sonarsearch, spyse, sublister, threatcrowd, threatminer,
-    urlscan, virustotal, wayback,
+    alienvault, anubisdb, binaryedge, c99, certspotter, chaos, crtsh, facebook, hackertarget,
+    intelx, passivetotal, sonarsearch, spyse, sublister, threatcrowd, threatminer, urlscan,
+    virustotal, wayback,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -23,8 +26,6 @@ async fn free_sources(host: Arc<String>) -> HashSet<String> {
     let sources: Vec<BoxFuture<Result<HashSet<String>>>> = vec![
         Box::pin(anubisdb::run(host.clone())),
         Box::pin(alienvault::run(host.clone())),
-        Box::pin(bufferover::run(host.clone(), true)),
-        Box::pin(bufferover::run(host.clone(), false)),
         Box::pin(certspotter::run(host.clone())),
         Box::pin(crtsh::run(host.clone())),
         Box::pin(threatcrowd::run(host.clone())),
@@ -61,8 +62,6 @@ async fn all_sources(host: Arc<String>) -> HashSet<String> {
         Box::pin(anubisdb::run(host.clone())),
         Box::pin(binaryedge::run(host.clone())),
         Box::pin(alienvault::run(host.clone())),
-        Box::pin(bufferover::run(host.clone(), true)),
-        Box::pin(bufferover::run(host.clone(), false)),
         Box::pin(certspotter::run(host.clone())),
         Box::pin(crtsh::run(host.clone())),
         Box::pin(threatcrowd::run(host.clone())),

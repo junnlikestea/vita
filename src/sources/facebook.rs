@@ -5,6 +5,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Debug, PartialEq)]
 struct Creds {
@@ -46,7 +47,7 @@ impl Creds {
             self.app_id, self.app_secret
         );
 
-        let resp: Option<AuthResp> = surf::get(auth_url).recv_json().await?;
+        let resp: Option<AuthResp> = reqwest::get(&auth_url).await?.json().await?;
 
         if let Some(r) = resp {
             Ok(r.access_token)
@@ -94,8 +95,12 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
         }
     };
 
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
     let uri = build_url(&host, &access_token);
-    let resp: Option<FacebookResult> = surf::get(uri).recv_json().await?;
+    let resp: Option<FacebookResult> = client.get(&uri).send().await?.json().await?;
 
     match resp {
         Some(data) => Ok(data.subdomains()),

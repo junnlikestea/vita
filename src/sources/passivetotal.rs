@@ -2,12 +2,14 @@ use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use base64::write::EncoderWriter as Base64Encoder;
 use dotenv::dotenv;
-use http_types::headers;
+use reqwest::header::ACCEPT;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
 use std::io::Write;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     key: String,
@@ -46,7 +48,7 @@ impl Query {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct PassiveTotalResult {
     success: bool,
     #[serde(rename = "primaryDomain")]
@@ -68,20 +70,30 @@ fn build_url() -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from passivetotal for: {}", &host);
     let creds = match Creds::from_env() {
         Ok(c) => c,
         Err(e) => return Err(e),
     };
+
     let uri = build_url();
-    let basic = basic_auth(&creds.key, Some(&creds.secret));
     let query = Query::new(&host);
-    let resp: PassiveTotalResult = surf::get(uri)
-        .set_header(headers::AUTHORIZATION, basic)
-        .set_header(headers::ACCEPT, "application/json")
-        .body_json(&query)?
-        .recv_json()
+
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+    let resp: PassiveTotalResult = client
+        .get(&uri)
+        .basic_auth(&creds.key, Some(&creds.secret))
+        .header(ACCEPT, "application/json")
+        .json(&query)
+        .send()
+        .await?
+        .json()
         .await?;
 
+    debug!("passivetotal response: {:?}", &resp);
     if resp.success {
         let subdomains = resp.subdomains();
 

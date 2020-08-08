@@ -5,6 +5,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     key: String,
@@ -20,12 +21,12 @@ impl Creds {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct C99Result {
     subdomains: Option<Vec<C99Item>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct C99Item {
     subdomain: String,
 }
@@ -48,18 +49,30 @@ fn build_url(host: &str, api_key: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from C99 for: {}", &host);
     let api_key = match Creds::read_creds() {
         Ok(creds) => creds.key,
-        Err(e) => return Err(e),
+        Err(e) => {
+            error!("{}", &e);
+            return Err(e);
+        }
     };
 
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
     let uri = build_url(&host, &api_key);
-    let resp: C99Result = surf::get(uri).recv_json().await?;
+    let resp: C99Result = client.get(&uri).send().await?.json().await?;
+    debug!("C99 response: {:?}", &resp);
+
     let subdomains = resp.subdomains();
 
     if !subdomains.is_empty() {
         Ok(subdomains)
     } else {
+        debug!("C99 returned no data for: {}", &host);
         Err(Error::source_error("C99", host))
     }
 }

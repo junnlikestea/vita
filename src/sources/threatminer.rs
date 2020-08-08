@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Deserialize)]
 struct ThreatminerResult {
@@ -24,8 +25,14 @@ pub fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from threatminer for: {}", &host);
     let uri = build_url(&host);
-    let resp: Option<ThreatminerResult> = surf::get(uri).recv_json().await?;
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
+    let resp: Option<ThreatminerResult> = client.get(&uri).send().await?.json().await?;
 
     match resp {
         Some(d) => {

@@ -1,11 +1,12 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use dotenv::dotenv;
-use http_types::headers;
+use reqwest::header::ACCEPT;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     token: String,
@@ -21,17 +22,17 @@ impl Creds {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct SpyseResult {
     data: SpyseItem,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct SpyseItem {
     items: Vec<Subdomain>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Subdomain {
     name: String,
 }
@@ -50,18 +51,29 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from spyse for: {}", &host);
     let token = match Creds::read_creds() {
         Ok(creds) => creds.token,
         Err(e) => return Err(e),
     };
 
     let uri = build_url(&host);
-    let resp: Option<SpyseResult> = surf::get(uri)
-        .set_header(headers::ACCEPT, "application/json")
-        .set_header(headers::AUTHORIZATION, format!("Bearer {}", token))
-        .recv_json()
+
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
+    let resp: Option<SpyseResult> = client
+        .get(&uri)
+        .header(ACCEPT, "application/json")
+        .bearer_auth(token)
+        .send()
+        .await?
+        .json()
         .await?;
 
+    debug!("spyse response: {:?}", &resp);
     match resp {
         Some(d) => {
             let subdomains = d.subdomains();

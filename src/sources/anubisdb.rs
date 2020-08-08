@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct AnubisResult {
     results: Value,
@@ -30,8 +31,14 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from anubisdb for: {}", &host);
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
     let uri = build_url(&host);
-    let resp: Option<Value> = surf::get(uri).recv_json().await?;
+    let resp: Option<Value> = client.get(&uri).send().await?.json().await?;
+    debug!("anubisdb response: {:?}", &resp);
 
     match resp {
         Some(d) => {

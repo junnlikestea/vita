@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     url: String,
@@ -89,19 +90,34 @@ fn build_url(intelx_url: &str, api_key: &str, querying: bool, search_id: Option<
 }
 
 async fn get_searchid(host: Arc<String>) -> Result<String> {
+    trace!("getting intelx searchid");
+
     let creds = match Creds::read_creds() {
         Ok(c) => c,
         Err(e) => return Err(e),
     };
 
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
     let query_uri = build_url(&creds.url, &creds.api_key, true, None);
     let body = Query::new(host.to_string());
-    let search_id: SearchId = surf::post(query_uri).body_json(&body)?.recv_json().await?;
+    let search_id: SearchId = client
+        .post(&query_uri)
+        .json(&body)
+        .send()
+        .await?
+        .json()
+        .await?;
 
+    debug!("searchid: {:?}", &search_id);
     Ok(search_id.id)
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from intelx for: {}", &host);
     let creds = match Creds::read_creds() {
         Ok(creds) => creds,
         Err(e) => return Err(e),
@@ -109,7 +125,8 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 
     let search_id = get_searchid(host.clone()).await?;
     let uri = build_url(&creds.url, &creds.api_key, false, Some(&search_id));
-    let resp: IntelxResults = surf::get(uri).recv_json().await?;
+    let resp: IntelxResults = reqwest::get(&uri).await?.json().await?;
+    debug!("intelx response: {:?}", &resp);
     let subdomains = resp.subdomains();
 
     if !subdomains.is_empty() {

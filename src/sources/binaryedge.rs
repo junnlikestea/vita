@@ -2,11 +2,11 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::IntoSubdomain;
 use dotenv::dotenv;
-use http_types::StatusCode;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     token: String,
@@ -87,22 +87,28 @@ pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
 }
 
 async fn next_page(host: Arc<String>, page: Option<i32>) -> Result<BinaryEdgeResponse> {
+    trace!("fetching a page from binaryedge for: {}", &host);
     let uri = build_url(&host, page);
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
 
     let token = match Creds::read_creds() {
         Ok(creds) => creds.token,
         Err(e) => return Err(e),
     };
 
-    let mut resp = surf::get(uri).set_header("X-Key", token).await?;
+    let resp = client.get(&uri).header("X-Key", token).send().await?;
 
     // Should probably add cleaner match arms, but this will do for now.
-    match resp.status() {
-        StatusCode::Unauthorized | StatusCode::Forbidden => Err(Error::auth_error("BinaryEdge")),
-        _ => {
-            let be: BinaryEdgeResponse = resp.body_json().await?;
-            Ok(be)
-        }
+    if resp.status().is_success() {
+        debug!("binaryedge response: {:?}", &resp);
+        let be: BinaryEdgeResponse = resp.json().await?;
+        Ok(be)
+    } else {
+        info!("binaryedge returned authentication error");
+        Err(Error::auth_error("BinaryEdge"))
     }
 }
 

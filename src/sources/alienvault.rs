@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Deserialize, Debug)]
 struct Subdomain {
@@ -32,9 +33,14 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from alienvault for: {}", &host);
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(5))
+        .build()?;
     let uri = build_url(&host);
-    let resp: AlienvaultResult = surf::get(uri).recv_json().await?;
-
+    let resp: AlienvaultResult = client.get(&uri).send().await?.json().await?;
+    debug!("alientvault response:{:?}", &resp);
     match resp.count {
         0 => Err(Error::source_error("AlienVault", host)),
         _ => Ok(resp.subdomains()),

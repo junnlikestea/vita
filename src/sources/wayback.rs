@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use serde_json::value::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 use url::Url;
 
 struct WaybackResult {
@@ -36,8 +37,14 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from wayback for: {}", &host);
     let uri = build_url(&host);
-    let resp: Option<Value> = surf::get(uri).recv_json().await?;
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
+    let resp: Option<Value> = client.get(&uri).send().await?.json().await?;
 
     match resp {
         Some(data) => {

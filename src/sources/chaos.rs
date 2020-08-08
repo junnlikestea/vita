@@ -1,11 +1,12 @@
 use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use dotenv::dotenv;
-use http_types::headers::AUTHORIZATION;
+use reqwest::header::AUTHORIZATION;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct Creds {
     key: String,
@@ -41,18 +42,28 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from projectdiscovery choas for: {}", &host);
     let api_key = match Creds::read_creds() {
         Ok(creds) => creds.key,
         Err(e) => return Err(e),
     };
 
     let uri = build_url(&host);
-    let resp: ChaosResult = surf::get(uri)
-        .set_header(AUTHORIZATION, api_key)
-        .recv_json()
-        .await?;
-    let subdomains = resp.subdomains();
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
 
+    let resp: ChaosResult = client
+        .get(&uri)
+        .header(AUTHORIZATION, api_key)
+        .send()
+        .await?
+        .json()
+        .await?;
+    debug!("projectdiscovery chaos response: {:#?}", &resp);
+
+    let subdomains = resp.subdomains();
     if !subdomains.is_empty() {
         Ok(subdomains)
     } else {

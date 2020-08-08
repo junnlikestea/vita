@@ -2,6 +2,7 @@ use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
 const API_ERROR: &str = "error check your search parameter";
 
@@ -29,8 +30,13 @@ fn build_url(host: &str) -> String {
 }
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .pool_idle_timeout(Duration::from_secs(4))
+        .build()?;
+
     let uri = build_url(&host);
-    let resp: String = surf::get(uri).recv_string().await?;
+    let resp: String = client.get(&uri).send().await?.text().await?;
 
     if resp != API_ERROR {
         Ok(HackerTarget::new(resp).subdomains())
