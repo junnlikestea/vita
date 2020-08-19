@@ -2,6 +2,9 @@ pub mod crobat {
     include!("../proto/pb/proto.rs");
 }
 
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 use crobat::crobat_client::CrobatClient;
 use crobat::QueryRequest;
 use std::collections::HashSet;
@@ -16,7 +19,8 @@ pub struct Crobat {
 
 impl Crobat {
     pub async fn new() -> Self {
-        let addr = "https://crobat-rpc.omnisint.io:443";
+        trace!("building crobat client");
+        let addr = "https://crobat-rpc.omnisint.io";
         let conn = Crobat::build_tls_client(addr).await.unwrap();
 
         Self {
@@ -41,13 +45,16 @@ impl Crobat {
 
     // handle
     pub async fn get_subs(&mut self, host: Arc<String>) -> Result<HashSet<String>> {
+        trace!("querying crobat client for subdomains");
         let mut subdomains = HashSet::new();
         let request = tonic::Request::new(QueryRequest {
             query: host.to_string(),
         });
+        debug!("{:?}", &request);
 
         let mut stream = self.client.get_subdomains(request).await?.into_inner();
         while let Some(result) = stream.message().await? {
+            debug!("crobat result {:?}", &result);
             subdomains.insert(result.domain);
         }
 

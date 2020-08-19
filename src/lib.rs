@@ -10,8 +10,8 @@ use futures::future::BoxFuture;
 use reqwest::Client;
 use sources::{
     alienvault, anubisdb, binaryedge, c99, certspotter, chaos, crtsh, facebook, hackertarget,
-    intelx, passivetotal, recondev, sonarsearch, spyse, sublister, threatcrowd, threatminer,
-    urlscan, virustotal, wayback,
+    intelx, passivetotal, sonarsearch, spyse, sublister, threatcrowd, threatminer, urlscan,
+    virustotal, wayback,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -37,7 +37,6 @@ async fn free_sources(host: Arc<String>, client: Client) -> HashSet<String> {
         Box::pin(sublister::run(client.clone(), host.clone())),
         Box::pin(wayback::run(client.clone(), host.clone())),
         Box::pin(sonarsearch::run(host.clone())),
-        Box::pin(recondev::run(client.clone(), host.clone())),
         Box::pin(hackertarget::run(client.clone(), host.clone())),
     ];
 
@@ -80,7 +79,6 @@ async fn all_sources(host: Arc<String>, client: Client) -> HashSet<String> {
         Box::pin(passivetotal::run(client.clone(), host.clone())),
         Box::pin(hackertarget::run(client.clone(), host.clone())),
         Box::pin(sonarsearch::run(host.clone())),
-        Box::pin(recondev::run(client.clone(), host.clone())),
         Box::pin(chaos::run(client.clone(), host.clone())),
     ];
 
@@ -136,7 +134,7 @@ macro_rules! client {
     () => {
         reqwest::ClientBuilder::new()
             .timeout(Duration::from_secs(10))
-            .pool_idle_timeout(Duration::from_secs(4))
+            .pool_idle_timeout(Duration::from_secs(5))
             .build()
             .unwrap()
     };

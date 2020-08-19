@@ -9,7 +9,6 @@ pub mod facebook;
 pub mod hackertarget;
 pub mod intelx;
 pub mod passivetotal;
-pub mod recondev;
 pub mod securitytrails;
 pub mod sonarsearch;
 pub mod spyse;

@@ -9,7 +9,7 @@ use vita::error::Result;
 #[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
-    let args = create_clap_app("v0.1.10");
+    let args = create_clap_app("v0.1.12");
     let matches = args.get_matches();
     let mut all_sources = false;
     let mut hosts: Vec<String> = Vec::new();

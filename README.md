@@ -45,7 +45,6 @@ By default it will just ignore services you don't supply keys for.
 
 ### Sources
 * SonarSearch
-* Recon.dev 
 * C99
 * ProjectDiscovery Chaos
 * AnubisDB
@@ -107,7 +106,6 @@ which is a data source for Vita.
 
 [ProjectDiscovery](https://chaos.projectdiscovery.io/#/) For Chaos which is a great data source.
 
-[NahamSec](https://twitter.com/NahamSec) and [StaticFlow](https://twitter.com/_StaticFlow_) for their research and data source.
 
 
 
