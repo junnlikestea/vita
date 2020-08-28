@@ -88,10 +88,11 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     let access_token = match Creds::read_creds() {
         Ok(c) => c.authenticate(client.clone()).await?,
         Err(_) => {
+            warn!("Couldn't authenticate to Facebook, ignoring");
             return Err(Error::key_error(
                 "Facebook",
                 &["FB_APP_ID", "FB_APP_SECRET"],
-            ))
+            ));
         }
     };
 
@@ -99,8 +100,15 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     let resp: Option<FacebookResult> = client.get(&uri).send().await?.json().await?;
 
     match resp {
-        Some(data) => Ok(data.subdomains()),
-        None => Err(Error::source_error("Facebook", host)),
+        Some(data) => {
+            let subdomains = data.subdomains();
+            info!("Discovered {} results for {}", &subdomains.len(), &host);
+            Ok(subdomains)
+        }
+        None => {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("Facebook", host))
+        }
     }
 }
 

@@ -65,9 +65,12 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     match resp {
         Some(d) => {
             let subdomains = d.subdomains();
+
             if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
                 Ok(subdomains)
             } else {
+                warn!("No results for: {}", &host);
                 Err(Error::source_error("SecurityTrails", host))
             }
         }

@@ -90,8 +90,10 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
         let subdomains = resp.subdomains();
 
         if !subdomains.is_empty() {
+            info!("Discovered {} results for: {}", &subdomains.len(), &host);
             Ok(subdomains)
         } else {
+            warn!("No results for: {}", &host);
             Err(Error::source_error("PassiveTotal", host))
         }
     } else {

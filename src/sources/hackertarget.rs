@@ -36,8 +36,11 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     debug!("hackertarget response: {:?}", &resp);
 
     if resp != API_ERROR {
-        Ok(HackerTarget::new(resp).subdomains())
+        let subdomains = HackerTarget::new(resp).subdomains();
+        info!("Discovered {} results for: {}", &subdomains.len(), &host);
+        Ok(subdomains)
     } else {
+        warn!("No results found for: {}", &host);
         Err(Error::source_error("HackerTarget", host))
     }
 }

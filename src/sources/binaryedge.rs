@@ -49,9 +49,11 @@ fn build_url(host: &str, page: Option<i32>) -> String {
     }
 }
 
+//TODO: Clean this up, make pages fetch async
 // fetches the page in sequential order, it would be better to fetch them concurrently,
-// but for the small amount of pages it probably doesn't matte
+// but for the small amount of pages it probably doesn't matter
 pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
+    trace!("fetching data from binaryedge for: {}", &host);
     let mut tasks = Vec::new();
     let mut results: HashSet<String> = HashSet::new();
     let resp = next_page(client.clone(), host.clone(), None).await?;
@@ -85,6 +87,7 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
             .for_each(drop);
     }
 
+    info!("Discovered {} results for: {}", results.len(), &host);
     Ok(results)
 }
 

@@ -27,8 +27,15 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     debug!("crt.sh response: {:?}", &resp);
 
     match resp {
-        Some(data) => Ok(data.subdomains()),
-        None => Err(Error::source_error("Crt.sh", host)),
+        Some(data) => {
+            let subdomains = data.subdomains();
+            info!("Discovered {} results for: {}", subdomains.len(), &host);
+            Ok(subdomains)
+        }
+        None => {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("Crt.sh", host))
+        }
     }
 }
 

@@ -34,20 +34,24 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     trace!("fetching data from anubisdb for: {}", &host);
     let uri = build_url(&host);
     let resp: Option<Value> = client.get(&uri).send().await?.json().await?;
-    debug!("anubisdb response: {:?}", &resp);
 
     match resp {
         Some(d) => {
             let subdomains = AnubisResult::new(d).subdomains();
 
             if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
                 Ok(subdomains)
             } else {
+                warn!("No results for: {}", &host);
                 Err(Error::source_error("AnubisDB", host))
             }
         }
 
-        None => Err(Error::source_error("AnubisDB", host)),
+        None => {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("AnubisDB", host))
+        }
     }
 }
 

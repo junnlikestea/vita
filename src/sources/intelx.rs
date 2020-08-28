@@ -91,7 +91,6 @@ fn build_url(intelx_url: &str, api_key: &str, querying: bool, search_id: Option<
 
 async fn get_searchid(client: Client, host: Arc<String>) -> Result<String> {
     trace!("getting intelx searchid");
-
     let creds = match Creds::read_creds() {
         Ok(c) => c,
         Err(e) => return Err(e),
@@ -125,8 +124,10 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     debug!("intelx response: {:?}", &resp);
 
     if !subdomains.is_empty() {
+        info!("Discovered {} results for: {}", &subdomains.len(), &host);
         Ok(subdomains)
     } else {
+        warn!("No results for: {}", &host);
         Err(Error::source_error("Intelx", host))
     }
 }

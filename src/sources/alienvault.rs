@@ -39,8 +39,15 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     debug!("alientvault response:{:?}", &resp);
 
     match resp.count {
-        0 => Err(Error::source_error("AlienVault", host)),
-        _ => Ok(resp.subdomains()),
+        0 => {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("AlienVault", host))
+        }
+        _ => {
+            let subdomains = resp.subdomains();
+            info!("Discovered {} results for {}", &subdomains.len(), &host);
+            Ok(subdomains)
+        }
     }
 }
 

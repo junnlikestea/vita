@@ -57,14 +57,14 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
 
     let uri = build_url(&host, &api_key);
     let resp: C99Result = client.get(&uri).send().await?.json().await?;
-    debug!("C99 response: {:?}", &resp);
 
     let subdomains = resp.subdomains();
 
     if !subdomains.is_empty() {
+        info!("Discovered {} results for {}", &subdomains.len(), &host);
         Ok(subdomains)
     } else {
-        debug!("C99 returned no data for: {}", &host);
+        warn!("No results for: {}", &host);
         Err(Error::source_error("C99", host))
     }
 }

@@ -6,11 +6,13 @@ use std::sync::Arc;
 
 pub async fn run(host: Arc<String>) -> Result<HashSet<String>> {
     let mut client = Crobat::new().await;
-    let subs = client.get_subs(host.clone()).await?;
+    let subdomains = client.get_subs(host.clone()).await?;
 
-    if !subs.is_empty() {
-        Ok(subs)
+    if !subdomains.is_empty() {
+        info!("Discovered {} results for: {}", &subdomains.len(), &host);
+        Ok(subdomains)
     } else {
+        warn!("No results for: {}", &host);
         Err(Error::source_error("SonarSearch", host))
     }
 }
