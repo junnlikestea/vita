@@ -50,22 +50,26 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
 
     //TODO: add info on if authenticaiton failed.
     let uri = build_url(&host);
-    let resp: ChaosResult = client
+    let resp = client
         .get(&uri)
         .header(AUTHORIZATION, api_key)
         .send()
-        .await?
-        .json()
         .await?;
-    debug!("projectdiscovery chaos response: {:#?}", &resp);
+    //debug!("projectdiscovery chaos response: {:#?}", &resp);
 
-    let subdomains = resp.subdomains();
-    if !subdomains.is_empty() {
-        info!("Discovered {} results for: {}", &subdomains.len(), &host);
-        Ok(subdomains)
+    if resp.status().is_client_error() {
+        warn!("got status: {} from chaos", resp.status().as_str());
+        Err(Error::auth_error("chaos"))
     } else {
-        warn!("No results for: {}", &host);
-        Err(Error::source_error("Chaos", host))
+        let resp: ChaosResult = resp.json().await?;
+        let subdomains = resp.subdomains();
+        if !subdomains.is_empty() {
+            info!("Discovered {} results for: {}", &subdomains.len(), &host);
+            Ok(subdomains)
+        } else {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("Chaos", host))
+        }
     }
 }
 

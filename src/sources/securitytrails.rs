@@ -21,7 +21,7 @@ impl Creds {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct SecTrailsResult {
     subdomains: Vec<String>,
     #[serde(skip)]
@@ -53,29 +53,24 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     };
 
     let uri = build_url(&host);
-    let resp: Option<SecTrailsResult> = client
-        .get(&uri)
-        .header("apikey", api_key)
-        .send()
-        .await?
-        .json()
-        .await?;
-    debug!("securitytrails response: {:?}", &resp);
+    let resp = client.get(&uri).header("apikey", api_key).send().await?;
+    if resp.status().is_client_error() {
+        warn!(
+            "got status: {} from security trails",
+            resp.status().as_str()
+        );
+        Err(Error::auth_error("securitytrails"))
+    } else {
+        let resp: Option<SecTrailsResult> = resp.json().await?;
 
-    match resp {
-        Some(d) => {
-            let subdomains = d.subdomains();
-
-            if !subdomains.is_empty() {
-                info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                Ok(subdomains)
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("SecurityTrails", host))
-            }
+        if resp.is_some() {
+            let subdomains = resp.unwrap().subdomains();
+            info!("Discovered {} results for: {}", &subdomains.len(), &host);
+            Ok(subdomains)
+        } else {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("SecurityTrails", host))
         }
-
-        None => Err(Error::source_error("SecurityTrails", host)),
     }
 }
 

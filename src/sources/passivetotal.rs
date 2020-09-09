@@ -75,18 +75,19 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
 
     let uri = build_url();
     let query = Query::new(&host);
-    let resp: PassiveTotalResult = client
+    let resp = client
         .get(&uri)
         .basic_auth(&creds.key, Some(&creds.secret))
         .header(ACCEPT, "application/json")
         .json(&query)
         .send()
-        .await?
-        .json()
         .await?;
 
-    debug!("passivetotal response: {:?}", &resp);
-    if resp.success {
+    if resp.status().is_client_error() {
+        warn!("got status: {} from passivetotal", resp.status().as_str());
+        Err(Error::auth_error("passivetotal"))
+    } else {
+        let resp: PassiveTotalResult = resp.json().await?;
         let subdomains = resp.subdomains();
 
         if !subdomains.is_empty() {
@@ -96,8 +97,6 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
             warn!("No results for: {}", &host);
             Err(Error::source_error("PassiveTotal", host))
         }
-    } else {
-        Err(Error::source_error("PassiveTotal", host))
     }
 }
 

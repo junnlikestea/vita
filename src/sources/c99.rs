@@ -56,16 +56,25 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     };
 
     let uri = build_url(&host, &api_key);
-    let resp: C99Result = client.get(&uri).send().await?.json().await?;
+    let resp = client.get(&uri).send().await?;
 
-    let subdomains = resp.subdomains();
-
-    if !subdomains.is_empty() {
-        info!("Discovered {} results for {}", &subdomains.len(), &host);
-        Ok(subdomains)
+    //TODO: not sure about this logic.
+    if resp.status().is_client_error() {
+        warn!(
+            "got status: {} from c99, you may have hit rate limits",
+            resp.status().as_str()
+        );
+        Err(Error::auth_error("c99"))
     } else {
-        warn!("No results for: {}", &host);
-        Err(Error::source_error("C99", host))
+        let resp: C99Result = resp.json().await?;
+        let subdomains = resp.subdomains();
+        if !subdomains.is_empty() {
+            info!("Discovered {} results for {}", &subdomains.len(), &host);
+            Ok(subdomains)
+        } else {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("C99", host))
+        }
     }
 }
 

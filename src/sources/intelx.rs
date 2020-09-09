@@ -119,16 +119,23 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
 
     let search_id = get_searchid(client.clone(), host.clone()).await?;
     let uri = build_url(&creds.url, &creds.api_key, false, Some(&search_id));
-    let resp: IntelxResults = client.get(&uri).send().await?.json().await?;
-    let subdomains = resp.subdomains();
-    debug!("intelx response: {:?}", &resp);
+    let resp = client.get(&uri).send().await?;
 
-    if !subdomains.is_empty() {
-        info!("Discovered {} results for: {}", &subdomains.len(), &host);
-        Ok(subdomains)
+    if resp.status().is_client_error() {
+        warn!("got status: {} for intelx", resp.status().as_str());
+        Err(Error::auth_error("intelx"))
     } else {
-        warn!("No results for: {}", &host);
-        Err(Error::source_error("Intelx", host))
+        let resp: IntelxResults = resp.json().await?;
+        let subdomains = resp.subdomains();
+        debug!("intelx response: {:?}", &resp);
+
+        if !subdomains.is_empty() {
+            info!("Discovered {} results for: {}", &subdomains.len(), &host);
+            Ok(subdomains)
+        } else {
+            warn!("No results for: {}", &host);
+            Err(Error::source_error("Intelx", host))
+        }
     }
 }
 
