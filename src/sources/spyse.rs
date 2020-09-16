@@ -4,9 +4,9 @@ use dotenv::dotenv;
 use reqwest::header::ACCEPT;
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 struct Creds {
     token: String,
@@ -38,7 +38,7 @@ struct Subdomain {
 }
 
 impl IntoSubdomain for SpyseResult {
-    fn subdomains(&self) -> HashSet<String> {
+    fn subdomains(&self) -> Vec<String> {
         self.data.items.iter().map(|i| i.name.to_owned()).collect()
     }
 }
@@ -50,7 +50,7 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     trace!("fetching data from spyse for: {}", &host);
     let token = match Creds::read_creds() {
         Ok(creds) => creds.token,
@@ -70,12 +70,12 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
         Err(Error::auth_error("Spyse"))
     } else {
         let resp: Option<SpyseResult> = resp.json().await?;
-        //let subdomains = resp.unwrap_or_default().subdomains();
 
         if resp.is_some() {
             let subdomains = resp.unwrap().subdomains();
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            Ok(subdomains)
+            sender.send(subdomains).await?;
+            Ok(())
         } else {
             warn!("No results for: {}", &host);
             Err(Error::source_error("Spyse", host))
@@ -88,6 +88,7 @@ mod tests {
     use super::*;
     use crate::client;
     use std::time::Duration;
+    use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
@@ -100,18 +101,24 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn returns_results() {
+        let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
         let client = client!();
-        let results = run(client, host).await.unwrap();
+        let mut results = Vec::new();
+        run(client, host, tx).await;
+        for r in rx.recv().await {
+            results.extend(r)
+        }
         assert!(!results.is_empty());
     }
 
     #[ignore]
     #[tokio::test]
     async fn handle_no_results() {
+        let (tx, rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
-        let res = run(client, host).await;
+        let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

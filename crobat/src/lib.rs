@@ -7,7 +7,6 @@ extern crate pretty_env_logger;
 extern crate log;
 use crobat::crobat_client::CrobatClient;
 use crobat::QueryRequest;
-use std::collections::HashSet;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 
@@ -44,9 +43,9 @@ impl Crobat {
     }
 
     // handle
-    pub async fn get_subs(&mut self, host: Arc<String>) -> Result<HashSet<String>> {
+    pub async fn get_subs(&mut self, host: Arc<String>) -> Result<Vec<String>> {
         trace!("querying crobat client for subdomains");
-        let mut subdomains = HashSet::new();
+        let mut subdomains = Vec::new();
         let request = tonic::Request::new(QueryRequest {
             query: host.to_string(),
         });
@@ -55,7 +54,7 @@ impl Crobat {
         let mut stream = self.client.get_subdomains(request).await?.into_inner();
         while let Some(result) = stream.message().await? {
             debug!("crobat result {:?}", &result);
-            subdomains.insert(result.domain);
+            subdomains.push(result.domain);
         }
 
         Ok(subdomains)

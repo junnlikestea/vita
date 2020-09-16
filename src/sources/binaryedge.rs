@@ -4,9 +4,9 @@ use crate::IntoSubdomain;
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 struct Creds {
     token: String,
@@ -31,7 +31,7 @@ struct BinaryEdgeResponse {
 }
 
 impl IntoSubdomain for BinaryEdgeResponse {
-    fn subdomains(&self) -> HashSet<String> {
+    fn subdomains(&self) -> Vec<String> {
         self.events.iter().map(|s| s.into()).collect()
     }
 }
@@ -52,17 +52,14 @@ fn build_url(host: &str, page: Option<i32>) -> String {
 //TODO: Clean this up, make pages fetch async
 // fetches the page in sequential order, it would be better to fetch them concurrently,
 // but for the small amount of pages it probably doesn't matter
-pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     trace!("fetching data from binaryedge for: {}", &host);
     let mut tasks = Vec::new();
-    let mut results: HashSet<String> = HashSet::new();
+    let mut results = Vec::new();
     let resp = next_page(client.clone(), host.clone(), None).await?;
 
     // insert subdomains from first page.
-    resp.subdomains()
-        .into_iter()
-        .map(|s| results.insert(s))
-        .for_each(drop);
+    results.extend(resp.subdomains().into_iter());
     let mut page = resp.page;
 
     loop {
@@ -80,15 +77,17 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
     }
 
     for t in tasks {
-        t.await??
-            .subdomains()
-            .into_iter()
-            .map(|s| results.insert(s))
-            .for_each(drop);
+        let subs = t.await??.subdomains().into_iter();
+        results.extend(subs);
     }
 
     info!("Discovered {} results for: {}", results.len(), &host);
-    Ok(results)
+    if !results.is_empty() {
+        let _ = sender.send(results).await?;
+        Ok(())
+    } else {
+        Err(Error::source_error("BinaryEdge", host))
+    }
 }
 
 async fn next_page(
@@ -108,7 +107,6 @@ async fn next_page(
 
     // Should probably add cleaner match arms, but this will do for now.
     if resp.status().is_success() {
-        debug!("binaryedge response: {:?}", &resp);
         let be: BinaryEdgeResponse = resp.json().await?;
         Ok(be)
     } else {
@@ -122,25 +120,29 @@ mod tests {
     use super::*;
     use crate::client;
     use std::time::Duration;
-
+    use tokio::sync::mpsc::channel;
     // Tests passed locally, ignoring for now.
-    // TODO: Add github secret to use ignored tests
-    // Checks to see if the run function returns subdomains
     #[tokio::test]
     #[ignore]
     async fn returns_results() {
+        let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_string());
         let client = client!();
-        let results = run(client, host).await.unwrap();
+        let mut results = Vec::new();
+        let _ = run(client, host, tx).await.unwrap();
+        for r in rx.recv().await {
+            results.extend(r);
+        }
         assert!(!results.is_empty());
     }
 
     #[tokio::test]
     #[ignore]
     async fn handle_no_results() {
+        let (tx, rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
-        let res = run(client, host).await;
+        let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
@@ -151,9 +153,10 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn handle_auth_error() {
+        let (tx, rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
-        let res = run(client, host).await;
+        let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

@@ -2,8 +2,8 @@ use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 #[derive(Deserialize, Debug)]
 struct Subdomain {
@@ -17,7 +17,7 @@ struct AlienvaultResult {
 }
 
 impl IntoSubdomain for AlienvaultResult {
-    fn subdomains(&self) -> HashSet<String> {
+    fn subdomains(&self) -> Vec<String> {
         self.passive_dns
             .iter()
             .map(|s| s.hostname.to_owned())
@@ -32,7 +32,7 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     trace!("fetching data from alienvault for: {}", &host);
     let uri = build_url(&host);
     let resp: AlienvaultResult = client.get(&uri).send().await?.json().await?;
@@ -46,7 +46,8 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
         _ => {
             let subdomains = resp.subdomains();
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            Ok(subdomains)
+            let _ = sender.send(subdomains).await?;
+            Ok(())
         }
     }
 }
@@ -56,6 +57,7 @@ mod tests {
     use super::*;
     use crate::client;
     use std::time::Duration;
+    use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
@@ -67,17 +69,24 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[tokio::test]
     async fn returns_results() {
+        let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_string());
         let client = client!();
-        let results = run(client, host).await.unwrap();
+        let mut results = Vec::new();
+        let _ = run(client, host, tx).await.unwrap();
+
+        for r in rx.recv().await {
+            results.extend(r);
+        }
         assert!(!results.is_empty());
     }
 
     #[tokio::test]
     async fn handle_no_results() {
+        let (tx, _) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
-        let res = run(client, host).await;
+        let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

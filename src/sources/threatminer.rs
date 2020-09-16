@@ -2,8 +2,8 @@ use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 #[derive(Deserialize)]
 struct ThreatminerResult {
@@ -12,8 +12,8 @@ struct ThreatminerResult {
 
 impl IntoSubdomain for ThreatminerResult {
     //todo: does it have to be HashSet<String> or can we change to HashSet<&str>
-    fn subdomains(&self) -> HashSet<String> {
-        self.results.iter().map(|s| s.into()).collect()
+    fn subdomains(&self) -> Vec<String> {
+        self.results.iter().map(|s| s.to_owned()).collect()
     }
 }
 
@@ -24,7 +24,7 @@ pub fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     trace!("fetching data from threatminer for: {}", &host);
     let uri = build_url(&host);
     let resp: Option<ThreatminerResult> = client.get(&uri).send().await?.json().await?;
@@ -35,7 +35,8 @@ pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
 
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                Ok(subdomains)
+                let _ = sender.send(subdomains).await?;
+                Ok(())
             } else {
                 warn!("No results found for: {}", &host);
                 Err(Error::source_error("ThreatMiner", host))
@@ -51,6 +52,7 @@ mod tests {
     use super::*;
     use crate::client;
     use std::time::Duration;
+    use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
@@ -61,18 +63,24 @@ mod tests {
     // Checks to see if the run function returns subdomains
     #[tokio::test]
     async fn returns_results() {
+        let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
         let client = client!();
-        let results = run(client, host).await.unwrap();
+        let mut results = Vec::new();
+        run(client, host, tx).await;
+        for r in rx.recv().await {
+            results.extend(r)
+        }
         assert!(!results.is_empty());
     }
 
     //Some("WaybackMachine couldn't find results for: anVubmxpa2VzdGVh.com")
     #[tokio::test]
     async fn handle_no_results() {
+        let (tx, _) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
-        let res = run(client, host).await;
+        let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

@@ -2,8 +2,8 @@ use crate::error::{Error, Result};
 use crate::IntoSubdomain;
 use reqwest::Client;
 use serde_json::value::Value;
-use std::collections::HashSet;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 use url::Url;
 
 struct WaybackResult {
@@ -18,7 +18,7 @@ impl WaybackResult {
 
 //TODO: this could be cleaned up, to avoid creating the extra vec `vecs`
 impl IntoSubdomain for WaybackResult {
-    fn subdomains(&self) -> HashSet<String> {
+    fn subdomains(&self) -> Vec<String> {
         let arr = self.data.as_array().unwrap();
         let vecs: Vec<&str> = arr.iter().map(|s| s[0].as_str().unwrap()).collect();
         vecs.into_iter()
@@ -36,18 +36,20 @@ fn build_url(host: &str) -> String {
     )
 }
 
-pub async fn run(client: Client, host: Arc<String>) -> Result<HashSet<String>> {
+pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     trace!("fetching data from wayback for: {}", &host);
     let uri = build_url(&host);
     let resp: Option<Value> = client.get(&uri).send().await?.json().await?;
-
     match resp {
         Some(data) => {
             let subdomains = WaybackResult::new(data).subdomains();
 
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                Ok(subdomains)
+                if let Err(e) = sender.send(subdomains).await {
+                    error!("got error {} when trying to send to channel", e)
+                }
+                Ok(())
             } else {
                 warn!("No results found for: {}", &host);
                 Err(Error::source_error("Wayback Machine", host))
@@ -63,6 +65,7 @@ mod tests {
     use super::*;
     use crate::client;
     use std::time::Duration;
+    use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
@@ -75,18 +78,25 @@ mod tests {
     #[ignore] // hangs forever on windows for some reasons?
     #[tokio::test]
     async fn returns_results() {
+        let (tx, mut rx) = channel(20);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!();
-        let results = run(client, host).await.unwrap();
+        let client = client!(10, 20);
+        let mut results = Vec::new();
+        run(client, host, tx).await;
+        for r in rx.recv().await {
+            results.extend(r)
+        }
+        println!("{:#?}", &results);
         assert!(!results.is_empty());
     }
 
     #[ignore]
     #[tokio::test]
     async fn handle_no_results() {
+        let (tx, rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
-        let res = run(client, host).await;
+        let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

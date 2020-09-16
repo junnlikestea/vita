@@ -31,8 +31,8 @@ async fn main() -> Result<()> {
 
     let host_regexs = build_host_regex(&hosts);
 
-    vita::runner(hosts, all_sources, max_concurrent)
-        .await
+    let subdomains = vita::runner(hosts, all_sources, max_concurrent).await?;
+    subdomains
         .iter()
         .flat_map(|a| a.split_whitespace())
         .filter(|b| host_regexs.is_match(&b) && !b.starts_with('*'))
