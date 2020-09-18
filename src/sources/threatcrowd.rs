@@ -57,7 +57,7 @@ mod tests {
         let host = Arc::new("hackerone.com".to_owned());
         let client = client!();
         let mut results = Vec::new();
-        run(client, host, tx).await;
+        let _ = run(client, host, tx).await;
         for r in rx.recv().await {
             results.extend(r)
         }
@@ -66,7 +66,7 @@ mod tests {
 
     #[tokio::test]
     async fn handle_no_results() {
-        let (tx, _) = channel(1);
+        let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
         let res = run(client, host, tx).await;

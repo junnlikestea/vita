@@ -86,7 +86,7 @@ mod tests {
 
     #[tokio::test]
     async fn handle_no_results() {
-        let (tx, _) = channel(1);
+        let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
         let client = client!();
         let res = run(client, host, tx).await;
