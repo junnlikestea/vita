@@ -118,11 +118,12 @@ pub async fn runner(
     hosts: Vec<String>,
     all: bool,
     max_concurrent: usize,
+    timeout: u64,
 ) -> Result<HashSet<String>> {
     // this isn't really a concurrency threshold, but more of a buffer on how many senders we can
     // have at one time,so kinda is also.
     let (tx, mut rx) = mpsc::channel(max_concurrent);
-    let client = client!();
+    let client = client!(timeout, timeout);
     let mut subdomains = HashSet::new();
 
     for host in hosts.into_iter() {
