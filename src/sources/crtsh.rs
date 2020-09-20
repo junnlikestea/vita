@@ -59,12 +59,8 @@ mod tests {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
         let client = client!();
-        let mut results = Vec::new();
         let _ = run(client, host, tx).await;
-        for r in rx.recv().await {
-            results.extend(r)
-        }
-        assert!(!results.is_empty());
+        assert!(!rx.recv().await.unwrap().is_empty());
     }
 
     #[ignore] // tests passing locally but failing on linux ci?

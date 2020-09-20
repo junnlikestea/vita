@@ -28,10 +28,8 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let mut results = Vec::new();
         let _ = run(host, tx).await.unwrap();
-        results.extend(rx.recv().await);
-        assert!(!results.is_empty());
+        assert!(!rx.recv().await.unwrap().is_empty());
     }
 
     #[ignore]

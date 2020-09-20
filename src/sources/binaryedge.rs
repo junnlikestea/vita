@@ -127,13 +127,9 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_string());
-        let client = client!();
-        let mut results = Vec::new();
+        let client = client!(25, 25);
         let _ = run(client, host, tx).await;
-        for r in rx.recv().await {
-            results.extend(r);
-        }
-        assert!(!results.is_empty());
+        assert!(!rx.recv().await.unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -141,7 +137,7 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!();
+        let client = client!(25, 25);
         let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
@@ -155,7 +151,7 @@ mod tests {
     async fn handle_auth_error() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!();
+        let client = client!(25, 25);
         let res = run(client, host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
