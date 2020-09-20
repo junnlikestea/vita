@@ -42,6 +42,21 @@ vita -d hackerone.com -a
 ``` 
 By default it will just ignore services you don't supply keys for.
 
+If you would like some more verbose output you can use the `-v` flag. There are
+different levels of verbosity ranging from noisy to informational, most of the
+time I just use `info`. This is all printing to stderr, so it won't be captured
+in the results.
+* `info`: General information like how many results each source returned.
+* `debug`: Lots and lots of information about what's going on under the hood.
+```
+vita -d hackerone.com -v info
+```
+
+### Common error - Too many open files
+Vita uses async concurrent http requests under the hood. If you encounter an error 
+similar to *"Too many open files"* it means that there isn't enough available file descriptors on 
+your system. You can fix this by increasing the hard and soft limits. There are 
+lots of different guides available to increase the limits [but here is one for linux](https://www.tecmint.com/increase-set-open-file-limits-in-linux/). 
 
 ### Sources
 * SonarSearch
