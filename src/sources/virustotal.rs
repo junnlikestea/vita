@@ -68,7 +68,11 @@ mod tests {
         let host = Arc::new("hackerone.com".to_owned());
         let client = client!(25, 25);
         let _ = run(client, host, tx).await;
-        assert!(!rx.recv().await.unwrap().is_empty());
+        let mut results = Vec::new();
+        for r in rx.recv().await {
+            results.extend(r)
+        }
+        assert!(!results.is_empty());
     }
 
     #[ignore]
