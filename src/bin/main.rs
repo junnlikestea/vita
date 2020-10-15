@@ -6,6 +6,7 @@ use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use vita::error::Result;
+use vita::Runner;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,7 +35,8 @@ async fn main() -> Result<()> {
 
     let host_regexs = build_host_regex(&hosts);
 
-    let subdomains = vita::runner(hosts, all_sources, max_concurrent, timeout).await?;
+    let runner = Runner::new(all_sources, max_concurrent, timeout);
+    let subdomains = runner.run(hosts).await?;
     subdomains
         .iter()
         .flat_map(|a| a.split_whitespace())
@@ -42,7 +44,7 @@ async fn main() -> Result<()> {
         .map(|d| d.into())
         .collect::<HashSet<String>>()
         .iter()
-        .for_each(|s| println!("{}", s)); // why not e? because s is for subdomain xD
+        .for_each(|s| println!("{}", s));
 
     Ok(())
 }

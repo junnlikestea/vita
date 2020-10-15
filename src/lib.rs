@@ -2,11 +2,9 @@ extern crate lazy_static;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
-pub mod error;
-pub mod sources;
-
 use error::Result;
 use futures::future::BoxFuture;
+use futures::future::FutureExt;
 use reqwest::Client;
 use sources::{
     alienvault, anubisdb, binaryedge, c99, certspotter, chaos, crtsh, facebook, hackertarget,
@@ -18,132 +16,165 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+pub mod error;
+pub mod sources;
+
 trait IntoSubdomain {
     fn subdomains(&self) -> Vec<String>;
 }
 
-// Collects data from all sources which don't require an API key
-async fn free_sources(
-    host: Arc<String>,
-    client: Client,
-    mut sender: mpsc::Sender<Vec<String>>,
-    max_concurrent: usize,
-) -> Result<()> {
-    let (tx, mut rx) = mpsc::channel(max_concurrent);
-    let sources: Vec<BoxFuture<Result<()>>> = vec![
-        Box::pin(anubisdb::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(alienvault::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(certspotter::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(crtsh::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(threatcrowd::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(urlscan::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(virustotal::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(threatminer::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(sublister::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(wayback::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(sonarsearch::run(host.clone(), tx.clone())),
-        Box::pin(hackertarget::run(client.clone(), host.clone(), tx)),
-    ];
-
-    let t1 = tokio::spawn(async move {
-        for s in sources {
-            tokio::spawn(async move { s.await });
-        }
-    });
-
-    let t2 = tokio::spawn(async move {
-        while let Some(v) = rx.recv().await {
-            if let Err(e) = sender.send(v).await {
-                error!("got error {} when sending to channel", e)
-            }
-        }
-    });
-
-    t1.await?;
-    t2.await?;
-    Ok(())
+// Configuration options for the `Runner`
+struct Config {
+    // Use paid and free sources
+    include_all: bool,
+    // The maximum number of conurrent tasks
+    concurrency: usize,
 }
 
-// Collects data from all sources
-async fn all_sources(
-    host: Arc<String>,
+// The `Runner` is responsible for collecting data from all the sources.
+pub struct Runner {
+    config: Config,
     client: Client,
-    mut sender: mpsc::Sender<Vec<String>>,
-    max_concurrent: usize,
-) -> Result<()> {
-    let (tx, mut rx) = mpsc::channel(max_concurrent);
-    let sources: Vec<BoxFuture<Result<()>>> = vec![
-        Box::pin(anubisdb::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(binaryedge::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(alienvault::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(certspotter::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(crtsh::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(threatcrowd::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(urlscan::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(virustotal::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(threatminer::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(sublister::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(wayback::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(facebook::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(spyse::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(c99::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(intelx::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(passivetotal::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(hackertarget::run(client.clone(), host.clone(), tx.clone())),
-        Box::pin(sonarsearch::run(host.clone(), tx.clone())),
-        Box::pin(chaos::run(client.clone(), host.clone(), tx)),
-    ];
-
-    let t1 = tokio::spawn(async move {
-        for s in sources {
-            tokio::spawn(async { s.await });
-        }
-    });
-
-    let t2 = tokio::spawn(async move {
-        while let Some(v) = rx.recv().await {
-            if let Err(e) = sender.send(v).await {
-                error!("got error {} when sending to channel", e)
-            }
-        }
-    });
-
-    t1.await?;
-    t2.await?;
-    Ok(())
 }
 
-// Takes a bunch of hosts and collects data on them
-pub async fn runner(
-    hosts: Vec<String>,
-    all: bool,
-    max_concurrent: usize,
-    timeout: u64,
-) -> Result<HashSet<String>> {
-    // this isn't really a concurrency threshold, but more of a buffer on how many senders we can
-    // have at one time,so kinda is also.
-    let (tx, mut rx) = mpsc::channel(max_concurrent);
-    let client = client!(timeout, timeout);
-    let mut subdomains = HashSet::new();
+impl Runner {
+    pub fn new(include_all: bool, concurrency: usize, timeout: u64) -> Self {
+        let config = Config {
+            include_all,
+            concurrency,
+        };
 
-    for host in hosts.into_iter() {
-        let h = Arc::new(host);
-        let client = client.clone();
-        let tx = tx.clone();
-        if all {
-            tokio::spawn(async move { all_sources(h, client, tx, max_concurrent).await });
-        } else {
-            tokio::spawn(async move { free_sources(h, client, tx, max_concurrent).await });
+        Self {
+            config,
+            client: client!(timeout, timeout),
         }
     }
-    // explicitly drop the remaning sender
-    drop(tx);
 
-    while let Some(v) = rx.recv().await {
-        v.into_iter().map(|s| subdomains.insert(s)).for_each(drop);
+    // Collects data from the sources which don't require an API key.
+    async fn free(&self, host: Arc<String>, mut sender: mpsc::Sender<Vec<String>>) -> Result<()> {
+        let (tx, mut rx) = mpsc::channel(self.config.concurrency);
+
+        // TODO: Is there a better way to do this?
+        let sources: Vec<BoxFuture<Result<()>>> = vec![
+            anubisdb::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            alienvault::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            certspotter::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            crtsh::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            threatcrowd::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            urlscan::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            virustotal::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            threatminer::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            sublister::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            wayback::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            hackertarget::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            sonarsearch::run(host.clone(), tx).boxed(),
+        ];
+
+        let producer = tokio::spawn(async move {
+            for s in sources {
+                tokio::spawn(async move { s.await });
+            }
+        });
+
+        let consumer = tokio::spawn(async move {
+            while let Some(v) = rx.recv().await {
+                if let Err(e) = sender.send(v).await {
+                    error!("got error {} when sending to channel", e)
+                }
+            }
+        });
+
+        producer.await?;
+        consumer.await?;
+        Ok(())
     }
 
-    Ok(subdomains)
+    // Collects data from paid and free sources.
+    async fn all(
+        self: Arc<Self>,
+        host: Arc<String>,
+        mut sender: mpsc::Sender<Vec<String>>,
+    ) -> Result<()> {
+        let (tx, mut rx) = mpsc::channel(self.config.concurrency);
+        let sources: Vec<BoxFuture<Result<()>>> = vec![
+            anubisdb::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            binaryedge::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            alienvault::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            certspotter::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            threatcrowd::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            virustotal::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            threatminer::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            sublister::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            passivetotal::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            hackertarget::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            urlscan::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            crtsh::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            wayback::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            facebook::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            spyse::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            c99::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            intelx::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
+            sonarsearch::run(host.clone(), tx.clone()).boxed(),
+            chaos::run(self.client.clone(), host.clone(), tx).boxed(),
+        ];
+
+        let producer = tokio::spawn(async move {
+            for s in sources {
+                tokio::spawn(async { s.await });
+            }
+        });
+
+        let consumer = tokio::spawn(async move {
+            while let Some(v) = rx.recv().await {
+                if let Err(e) = sender.send(v).await {
+                    error!("got error {} when sending to channel", e)
+                }
+            }
+        });
+
+        producer.await?;
+        consumer.await?;
+        Ok(())
+    }
+
+    // Takes a collection of hosts and spawns a new task to collect data from the free or paid
+    // sources for each host.
+    pub async fn run(self, hosts: Vec<String>) -> Result<HashSet<String>> {
+        use futures::stream::StreamExt;
+
+        let (tx, mut rx) = mpsc::channel(124);
+        let mut subdomains = HashSet::new();
+        let runner = Arc::new(self);
+
+        let producer = futures::stream::iter(hosts)
+            .map(|host| {
+                let h = Arc::new(host);
+                let tx = tx.clone();
+                let runner = Arc::clone(&runner);
+                if runner.config.include_all {
+                    tokio::spawn(async move {
+                        info!("spawning task for {}", &h);
+                        runner.all(h, tx).await
+                    })
+                } else {
+                    tokio::spawn(async move {
+                        info!("spawning task for {}", &h);
+                        runner.free(h, tx).await
+                    })
+                }
+            })
+            .buffer_unordered(runner.config.concurrency)
+            .collect::<Vec<_>>();
+        // explicitly drop the remaning sender
+        producer.await;
+        drop(tx);
+
+        while let Some(v) = rx.recv().await {
+            v.into_iter().map(|s| subdomains.insert(s)).for_each(drop);
+        }
+
+        Ok(subdomains)
+    }
 }
 
 #[macro_export]
