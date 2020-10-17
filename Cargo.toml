@@ -1,6 +1,6 @@
 [package]
 name = "vita"
-version = "0.1.13"
+version = "0.1.14"
 authors = ["Junn <likesgophers@gmail.com>"]
 description = "vita is a tool to gather subdomains from passive sources"
 categories = ["command-line-utilities", "passive reconnaissance"]
