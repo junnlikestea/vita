@@ -1,27 +1,21 @@
-extern crate lazy_static;
-extern crate pretty_env_logger;
-#[macro_use]
-extern crate log;
+use addr::DomainName;
 use error::Result;
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use reqwest::Client;
-use sources::{
-    alienvault, anubisdb, binaryedge, c99, certspotter, chaos, crtsh, facebook, hackertarget,
-    intelx, passivetotal, sonarsearch, spyse, sublister, threatcrowd, threatminer, urlscan,
-    virustotal, wayback,
-};
+use sources::*;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
+use tracing::{error, info};
 
 pub mod error;
 pub mod sources;
 
-trait IntoSubdomain {
-    fn subdomains(&self) -> Vec<String>;
-}
+const QUEUE_SIZE: usize = 100_000;
+const CHAN_SIZE: usize = 255;
 
 // Configuration options for the `Runner`
 struct Config {
@@ -50,7 +44,7 @@ impl Runner {
         }
     }
 
-    // Collects data from the sources which don't require an API key.
+    /// Collects data from the sources which don't require an API key.
     async fn free(&self, host: Arc<String>, mut sender: mpsc::Sender<Vec<String>>) -> Result<()> {
         let (tx, mut rx) = mpsc::channel(self.config.concurrency);
 
@@ -137,14 +131,44 @@ impl Runner {
         Ok(())
     }
 
-    // Takes a collection of hosts and spawns a new task to collect data from the free or paid
-    // sources for each host.
-    pub async fn run(self, hosts: Vec<String>) -> Result<HashSet<String>> {
+    /// Takes a collection of hosts and spawns a new task to collect data from the free or paid
+    /// sources for each host.
+    pub async fn run<T>(self, hosts: T) -> Result<Vec<String>>
+    where
+        T: IntoIterator<Item = String>,
+    {
         use futures::stream::StreamExt;
 
-        let (tx, mut rx) = mpsc::channel(124);
-        let mut subdomains = HashSet::new();
+        let (tx, mut rx) = mpsc::channel::<Vec<String>>(CHAN_SIZE);
+        let subdomains = Arc::new(Mutex::new(Vec::new()));
         let runner = Arc::new(self);
+
+        // Consumer thread which pushes results into a queue and writes them to the output vec
+        // periodically
+        let subs = Arc::clone(&subdomains);
+        let consumer = tokio::spawn(async move {
+            info!("spawning consumer thread");
+            let mut queue = Vec::with_capacity(QUEUE_SIZE);
+
+            while let Some(v) = rx.recv().await {
+                // if the buffer reaches capacity then empty it into the subdomains vec.
+                if queue.len() == QUEUE_SIZE {
+                    info!("queue reached capacity writing to results vec");
+                    let mut lock = subs.lock().await;
+                    lock.extend(queue.drain(..));
+                };
+
+                info!("pushing {} items into the queue", &v.len());
+                queue.extend(v.into_iter());
+            }
+
+            // if anything is remaning in the queue push it into the results vec
+            if !queue.is_empty() {
+                info!("draining the last {} items out of the queue", queue.len());
+                let mut lock = subs.lock().await;
+                lock.extend(queue.drain(..));
+            }
+        });
 
         let producer = futures::stream::iter(hosts)
             .map(|host| {
@@ -165,16 +189,73 @@ impl Runner {
             })
             .buffer_unordered(runner.config.concurrency)
             .collect::<Vec<_>>();
+
         // explicitly drop the remaning sender
         producer.await;
         drop(tx);
-
-        while let Some(v) = rx.recv().await {
-            v.into_iter().map(|s| subdomains.insert(s)).for_each(drop);
-        }
-
-        Ok(subdomains)
+        consumer.await?;
+        let res = Arc::try_unwrap(subdomains).unwrap();
+        Ok(res.into_inner())
     }
+}
+
+/// `PostProcessor` is responsible for filtering the raw data from each of the data sources into
+/// only those results which are relevant.
+pub struct PostProcessor {
+    roots: HashSet<String>,
+}
+
+impl PostProcessor {
+    pub fn new(hosts: &HashSet<String>) -> Self {
+        let roots = hosts
+            .iter()
+            .filter_map(|d| d.parse::<DomainName>().ok())
+            .map(|d| d.root().to_string())
+            .collect();
+
+        Self { roots }
+    }
+
+    /// Strips invalid characters from the domain, used before attempting to parse a domain into a
+    /// `DomainName`. If we didn't strip these characters any attempt to parse a domain into
+    /// `DomainName` would return `InvalidDomain` error.
+    fn strip_invalid(domain: &str) -> String {
+        let blacklisted = vec!["\"", "\\", "*"];
+        // iter over the blacklisted chars and return a string that has been cleaned.
+        blacklisted.iter().fold(domain.to_string(), |mut res, c| {
+            res = res.replace(c, "");
+            res.strip_prefix('.').unwrap_or(&res).to_lowercase()
+        })
+    }
+
+    /// Checks if a domain belongs to any of the root domains provided in the input
+    fn is_relevant(&self, domain: &str) -> bool {
+        match domain.parse::<DomainName>() {
+            Ok(d) => self.roots.contains(d.root().to_str()),
+            _ => false,
+        }
+    }
+
+    /// Takes the results from the `Runner.run` and filters them for relevant subdomains. Relevant is
+    /// any result which has a root domain that was present in the input file. In other words, if you
+    /// passed in `hackerone.com` as the input it will only return subdomains that belong to that root
+    /// domain e.g. `docs.hackerone.com`
+    pub fn process_results(&self, results: Vec<String>) -> Result<()> {
+        let filtered: HashSet<String> = results
+            .iter()
+            .flat_map(|a| a.split_whitespace())
+            .map(Self::strip_invalid)
+            .filter(|d| self.is_relevant(d))
+            .collect();
+
+        filtered.iter().for_each(|r| println!("{}", r));
+
+        Ok(())
+    }
+}
+
+trait IntoSubdomain {
+    fn subdomains(&self) -> Vec<String>;
 }
 
 #[macro_export]
