@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde_json::value::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{info, trace, warn};
 
 struct AnubisResult {
     results: Value,
@@ -21,7 +22,7 @@ impl IntoSubdomain for AnubisResult {
             .as_array()
             .unwrap()
             .iter()
-            .map(|s| s.as_str().unwrap().into())
+            .map(|s| s.to_string())
             .collect()
     }
 }
@@ -30,6 +31,8 @@ fn build_url(host: &str) -> String {
     format!("https://jldc.me/anubis/subdomains/{}", host)
 }
 
+//TODO: `Result` should be std::result::Result<(), Error::source_error>
+// the `run` should be a method on a struct `AnubisDB` or a trait across the whole project?
 pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     trace!("fetching data from anubisdb for: {}", &host);
     let uri = build_url(&host);

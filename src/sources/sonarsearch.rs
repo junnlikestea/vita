@@ -3,6 +3,7 @@ use crate::error::Result;
 use crobat::Crobat;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{info, warn};
 
 pub async fn run(host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
     let mut client = Crobat::new().await;

@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{debug, info, trace, warn};
 
 #[derive(Deserialize, Hash, PartialEq, Debug, Eq)]
 struct CrtshResult {

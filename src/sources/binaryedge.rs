@@ -7,6 +7,7 @@ use serde::Deserialize;
 use std::env;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{info, trace};
 
 struct Creds {
     token: String,
@@ -32,7 +33,7 @@ struct BinaryEdgeResponse {
 
 impl IntoSubdomain for BinaryEdgeResponse {
     fn subdomains(&self) -> Vec<String> {
-        self.events.iter().map(|s| s.into()).collect()
+        self.events.iter().map(|s| s.to_owned()).collect()
     }
 }
 

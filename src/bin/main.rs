@@ -1,57 +1,49 @@
 extern crate vita;
 use clap::{App, Arg};
-use regex::{RegexSet, RegexSetBuilder};
 use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use vita::error::Result;
+use vita::PostProcessor;
 use vita::Runner;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = create_clap_app("v0.1.13");
+    let args = create_clap_app();
     let matches = args.get_matches();
-    let mut all_sources = false;
-    let mut hosts: Vec<String> = Vec::new();
+    // make it a hashset incase user provided duplicate domains
+    let mut hosts: HashSet<String> = HashSet::new();
     let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
     let timeout: u64 = matches.value_of("timeout").unwrap().parse()?;
-    let verbosity = matches.value_of("verbosity").unwrap();
-    env::set_var("RUST_APP_LOG", verbosity);
-    pretty_env_logger::init_custom_env("RUST_APP_LOG");
+    let all_sources = matches.is_present("all_sources");
 
-    if matches.is_present("all_sources") {
-        all_sources = true;
+    if matches.is_present("verbosity") {
+        let builder = tracing_subscriber::fmt()
+            .with_env_filter(matches.value_of("verbosity").unwrap())
+            .with_filter_reloading();
+        let _handle = builder.reload_handle();
+        builder.try_init()?;
     }
 
     if matches.is_present("file") {
         let input = matches.value_of("input").unwrap();
         hosts = read_input(Some(input))?;
     } else if matches.is_present("domain") {
-        hosts.push(matches.value_of("input").unwrap().to_string());
+        hosts.insert(matches.value_of("input").unwrap().to_string());
     } else {
         hosts = read_input(None)?;
     }
 
-    let host_regexs = build_host_regex(&hosts);
-
     let runner = Runner::new(all_sources, max_concurrent, timeout);
-    let subdomains = runner.run(hosts).await?;
-    subdomains
-        .iter()
-        .flat_map(|a| a.split_whitespace())
-        .filter(|b| host_regexs.is_match(&b) && !b.starts_with('*'))
-        .map(|d| d.into())
-        .collect::<HashSet<String>>()
-        .iter()
-        .for_each(|s| println!("{}", s));
-
+    let cleaner = PostProcessor::new(&hosts);
+    cleaner.process_results(runner.run(hosts).await?)?;
     Ok(())
 }
 
 /// Reads input from stdin or a file
-fn read_input(path: Option<&str>) -> Result<Vec<String>> {
-    let mut contents = Vec::new();
+fn read_input(path: Option<&str>) -> Result<HashSet<String>> {
+    let mut contents = HashSet::new();
     let reader: Box<dyn BufRead> = match path {
         Some(filepath) => {
             Box::new(BufReader::new(File::open(filepath).map_err(|e| {
@@ -62,39 +54,16 @@ fn read_input(path: Option<&str>) -> Result<Vec<String>> {
     };
 
     for line in reader.lines() {
-        contents.push(line?)
+        contents.insert(line?);
     }
 
     Ok(contents)
 }
 
-/// Builds a regex that filters irrelevant subdomains from the results.
-/// `.*\.host\.com$`
-fn host_regex(host: &str) -> String {
-    format!(r".*\.{}$", host.replace(".", r"\."))
-}
-
-/// Builds a `RegexSet` to use for filtering irrelevant results.
-fn build_host_regex(hosts: &[String]) -> RegexSet {
-    // The maximum allowed size of a compiled regex.
-    const MAX_SIZE: usize = 10485760;
-
-    RegexSetBuilder::new(
-        hosts
-            .iter()
-            .map(|s| host_regex(&s))
-            .collect::<Vec<String>>(),
-    )
-    .size_limit(MAX_SIZE * 2)
-    .dfa_size_limit(MAX_SIZE * 2)
-    .build()
-    .unwrap()
-}
-
 /// Creates the Clap app to use Vita library as a cli tool
-fn create_clap_app(version: &str) -> clap::App {
+fn create_clap_app() -> clap::App<'static, 'static> {
     App::new("vita")
-        .version(version)
+        .version(env!("CARGO_PKG_VERSION"))
         .about("Gather subdomains from passive sources")
         .usage("vita -d <domain.com>")
         .arg(Arg::with_name("input").index(1).required(false))
@@ -118,11 +87,7 @@ fn create_clap_app(version: &str) -> clap::App {
         )
         .arg(
             Arg::with_name("concurrency")
-                .help(
-                    "The number of domains to fetch data for concurrently. This is actually
-                    the size of the channel buffer which in some way limits the number of concurrent
-                    tasks",
-                )
+                .help("The number of domains to fetch data for concurrently")
                 .short("c")
                 .long("concurrency")
                 .default_value("200")
@@ -136,7 +101,6 @@ fn create_clap_app(version: &str) -> clap::App {
                 )
                 .short("v")
                 .long("verbosity")
-                .default_value("")
                 .takes_value(true),
         )
         .arg(

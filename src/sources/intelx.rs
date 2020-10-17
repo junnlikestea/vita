@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{debug, info, trace, warn};
 
 struct Creds {
     url: String,

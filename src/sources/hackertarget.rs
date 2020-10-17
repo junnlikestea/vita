@@ -3,6 +3,7 @@ use crate::IntoSubdomain;
 use reqwest::Client;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{debug, info, trace, warn};
 
 const API_ERROR: &str = "error check your search parameter";
 

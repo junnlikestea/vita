@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{info, trace, warn};
 
 #[derive(Deserialize, Debug)]
 struct Subdomain {
@@ -36,19 +37,15 @@ pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<Strin
     trace!("fetching data from alienvault for: {}", &host);
     let uri = build_url(&host);
     let resp: AlienvaultResult = client.get(&uri).send().await?.json().await?;
-    debug!("alientvault response:{:?}", &resp);
 
-    match resp.count {
-        0 => {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("AlienVault", host))
-        }
-        _ => {
-            let subdomains = resp.subdomains();
-            info!("Discovered {} results for {}", &subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
-        }
+    if resp.count != 0 {
+        let subdomains = resp.subdomains();
+        info!("Discovered {} results for {}", &subdomains.len(), &host);
+        let _ = sender.send(subdomains).await?;
+        Ok(())
+    } else {
+        warn!("No results for: {}", &host);
+        Err(Error::source_error("AlienVault", host))
     }
 }
 
