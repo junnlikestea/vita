@@ -6,6 +6,7 @@ use serde::Deserialize;
 use std::env;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{info, warn};
 
 #[derive(Debug, PartialEq)]
 struct Creds {

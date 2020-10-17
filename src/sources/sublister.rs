@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde_json::value::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
+use tracing::{debug, info, trace, warn};
 
 struct SublisterResult {
     items: Vec<Value>,
