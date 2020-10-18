@@ -99,7 +99,7 @@ Add a `.env` file to the tool directory or add the following to your existing `.
 	* Can be found under the account settings page.
 * IntelligenceX:
 	* Needs `INTELX_KEY` and `INTELX_URL` to be set
-	* Can be found udner the [developer tab](https://intelx.io/account?tab=developer)
+	* Can be found under the [developer tab](https://intelx.io/account?tab=developer)
 
 If you hit rate limits or authentication fails, the source will just be ignored from the list of potential sources.
 
