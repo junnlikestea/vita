@@ -23,8 +23,11 @@ impl IntoSubdomain for WaybackResult {
         let arr = self.data.as_array().unwrap();
         let vecs: Vec<&str> = arr.iter().map(|s| s[0].as_str().unwrap()).collect();
         vecs.into_iter()
-            .filter_map(|a| Url::parse(a).ok())
-            .map(|u| u.host_str().unwrap().into())
+            .filter_map(|a| {
+                Url::parse(a)
+                    .ok()
+                    .and_then(|u| u.host_str().map(|h| h.into()))
+            })
             .collect()
     }
 }

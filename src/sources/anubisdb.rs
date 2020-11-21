@@ -18,12 +18,10 @@ impl AnubisResult {
 
 impl IntoSubdomain for AnubisResult {
     fn subdomains(&self) -> Vec<String> {
-        self.results
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+        match self.results.as_array() {
+            Some(array) => array.iter().map(|s| s.to_string()).collect(),
+            None => Vec::new(),
+        }
     }
 }
 
