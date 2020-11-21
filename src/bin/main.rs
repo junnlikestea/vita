@@ -36,8 +36,14 @@ async fn main() -> Result<()> {
     }
 
     let runner = Runner::new(all_sources, max_concurrent, timeout);
-    let cleaner = PostProcessor::new(&hosts);
-    cleaner.process_results(runner.run(hosts).await?)?;
+    let mut cleaner = PostProcessor::new();
+    if matches.is_present("subs-only") {
+        cleaner
+            .any_subdomain(&hosts)
+            .clean(runner.run(hosts).await?)?;
+    } else {
+        cleaner.any_root(&hosts).clean(runner.run(hosts).await?)?;
+    }
     Ok(())
 }
 
@@ -84,6 +90,11 @@ fn create_clap_app() -> clap::App<'static, 'static> {
                 .help("use sources which require an Api key")
                 .short("a")
                 .long("all"),
+        )
+        .arg(
+            Arg::with_name("subs-only")
+                .help("filter the results to only those which have the same subdomain")
+                .long("subs-only"),
         )
         .arg(
             Arg::with_name("concurrency")

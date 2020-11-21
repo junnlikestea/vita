@@ -199,21 +199,45 @@ impl Runner {
     }
 }
 
+/// Represents the filtering applied to the output
+enum Filter {
+    /// Return any result that matches the same subdomain
+    SubOnly,
+    /// Return any result that has the same root domain
+    RootOnly,
+}
+
 /// `PostProcessor` is responsible for filtering the raw data from each of the data sources into
 /// only those results which are relevant.
 pub struct PostProcessor {
     roots: HashSet<String>,
+    filter: Filter,
 }
 
 impl PostProcessor {
-    pub fn new(hosts: &HashSet<String>) -> Self {
-        let roots = hosts
+    pub fn new() -> Self {
+        Self {
+            roots: HashSet::new(),
+            filter: Filter::RootOnly,
+        }
+    }
+
+    /// Sets the `PostProcessor` to return any result which matches the same root domain
+    pub fn any_root(&mut self, hosts: &HashSet<String>) -> &mut Self {
+        self.roots = hosts
             .iter()
             .filter_map(|d| d.parse::<DomainName>().ok())
             .map(|d| d.root().to_string())
             .collect();
+        self.filter = Filter::RootOnly;
+        self
+    }
 
-        Self { roots }
+    /// Sets the `PostProcessor` to return any result which matches the same subdomain
+    pub fn any_subdomain(&mut self, hosts: &HashSet<String>) -> &mut Self {
+        self.roots = hosts.clone();
+        self.filter = Filter::SubOnly;
+        self
     }
 
     /// Strips invalid characters from the domain, used before attempting to parse a domain into a
@@ -230,9 +254,15 @@ impl PostProcessor {
 
     /// Checks if a domain belongs to any of the root domains provided in the input
     fn is_relevant(&self, domain: &str) -> bool {
-        match domain.parse::<DomainName>() {
-            Ok(d) => self.roots.contains(d.root().to_str()),
-            _ => false,
+        match self.filter {
+            Filter::RootOnly => {
+                if let Ok(d) = domain.parse::<DomainName>() {
+                    self.roots.contains(d.root().to_str())
+                } else {
+                    false
+                }
+            }
+            Filter::SubOnly => self.roots.iter().any(|root| domain.ends_with(root)),
         }
     }
 
@@ -240,7 +270,7 @@ impl PostProcessor {
     /// any result which has a root domain that was present in the input file. In other words, if you
     /// passed in `hackerone.com` as the input it will only return subdomains that belong to that root
     /// domain e.g. `docs.hackerone.com`
-    pub fn process_results(&self, results: Vec<String>) -> Result<()> {
+    pub fn clean(&mut self, results: Vec<String>) -> Result<()> {
         let filtered: HashSet<String> = results
             .iter()
             .flat_map(|a| a.split_whitespace())
