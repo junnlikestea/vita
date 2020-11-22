@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -26,39 +27,51 @@ impl IntoSubdomain for VirustotalResult {
     }
 }
 
-fn build_url(host: &str) -> String {
-    // TODO: can we gather the subdomains using:
-    // Handle pagenation
-    // https://www.virustotal.com/vtapi/v2/domain/report
-    format!(
-        "https://www.virustotal.com/ui/domains/{}/subdomains?limit=40",
-        host
-    )
+#[derive(Default)]
+pub struct VirusTotal {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from virustotal for: {}", &host);
-    let uri = build_url(&host);
-    let resp: VirustotalResult = client.get(&uri).send().await?.json().await?;
-    let subdomains = resp.subdomains();
+impl VirusTotal {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    if !subdomains.is_empty() {
-        info!("Discovered {} results for {}", &subdomains.len(), &host);
-        if let Err(e) = sender.send(subdomains).await {
-            error!("got error {} when sending to channel", e)
+    fn build_url(&self, host: &str) -> String {
+        // TODO: can we gather the subdomains using:
+        // Handle pagenation
+        // https://www.virustotal.com/vtapi/v2/domain/report
+        format!(
+            "https://www.virustotal.com/ui/domains/{}/subdomains?limit=40",
+            host
+        )
+    }
+}
+
+#[async_trait]
+impl DataSource for VirusTotal {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from virustotal for: {}", &host);
+        let uri = self.build_url(&host);
+        let resp: VirustotalResult = self.client.get(&uri).send().await?.json().await?;
+        let subdomains = resp.subdomains();
+
+        if !subdomains.is_empty() {
+            info!("Discovered {} results for {}", &subdomains.len(), &host);
+            if let Err(e) = tx.send(subdomains).await {
+                error!("got error {} when sending to channel", e)
+            }
+            Ok(())
+        } else {
+            warn!("No results found for {}", &host);
+            Err(Error::source_error("VirusTotal", host))
         }
-        Ok(())
-    } else {
-        warn!("No results found for {}", &host);
-        Err(Error::source_error("VirusTotal", host))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
     // IGNORE by default since we have limited api calls.
@@ -67,8 +80,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = VirusTotal::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -81,8 +93,7 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
+        let res = VirusTotal::default().run(host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

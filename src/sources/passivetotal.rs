@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use dotenv::dotenv;
 use reqwest::header::ACCEPT;
 use reqwest::Client;
@@ -63,41 +64,56 @@ impl IntoSubdomain for PassiveTotalResult {
     }
 }
 
-fn build_url() -> String {
-    "https://api.passivetotal.org/v2/enrichment/subdomains".to_string()
+#[derive(Default)]
+pub struct PassiveTotal {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from passivetotal for: {}", &host);
-    let creds = match Creds::from_env() {
-        Ok(c) => c,
-        Err(e) => return Err(e),
-    };
+impl PassiveTotal {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    let uri = build_url();
-    let query = Query::new(&host);
-    let resp = client
-        .get(&uri)
-        .basic_auth(&creds.key, Some(&creds.secret))
-        .header(ACCEPT, "application/json")
-        .json(&query)
-        .send()
-        .await?;
+    fn build_url(&self) -> String {
+        "https://api.passivetotal.org/v2/enrichment/subdomains".to_string()
+    }
+}
 
-    if resp.status().is_client_error() {
-        warn!("got status: {} from passivetotal", resp.status().as_str());
-        Err(Error::auth_error("passivetotal"))
-    } else {
-        let resp: PassiveTotalResult = resp.json().await?;
-        let subdomains = resp.subdomains();
+#[async_trait]
+impl DataSource for PassiveTotal {
+    async fn run(&self, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from passivetotal for: {}", &host);
+        let creds = match Creds::from_env() {
+            Ok(c) => c,
+            Err(e) => return Err(e),
+        };
 
-        if !subdomains.is_empty() {
-            info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
+        let uri = self.build_url();
+        let query = Query::new(&host);
+        let resp = self
+            .client
+            .get(&uri)
+            .basic_auth(&creds.key, Some(&creds.secret))
+            .header(ACCEPT, "application/json")
+            .json(&query)
+            .send()
+            .await?;
+
+        if resp.status().is_client_error() {
+            warn!("got status: {} from passivetotal", resp.status().as_str());
+            Err(Error::auth_error("passivetotal"))
         } else {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("PassiveTotal", host))
+            let resp: PassiveTotalResult = resp.json().await?;
+            let subdomains = resp.subdomains();
+
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                let _ = sender.send(subdomains).await?;
+                Ok(())
+            } else {
+                warn!("No results for: {}", &host);
+                Err(Error::source_error("PassiveTotal", host))
+            }
         }
     }
 }
@@ -105,8 +121,6 @@ pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
     use tokio::sync::mpsc::channel;
     // Checks to see if the run function returns subdomains
     #[tokio::test]
@@ -114,8 +128,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = PassiveTotal::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -128,8 +141,7 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
+        let res = PassiveTotal::default().run(host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

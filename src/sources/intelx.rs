@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -76,67 +77,87 @@ impl IntoSubdomain for IntelxResults {
     }
 }
 
-// 9df61df0-84f7-4dc7-b34c-8ccfb8646ace
-fn build_url(intelx_url: &str, api_key: &str, querying: bool, search_id: Option<&str>) -> String {
-    if querying {
-        format!("https://{}/phonebook/search?k={}", intelx_url, api_key)
-    } else {
-        format!(
-            "https://{}/phonebook/search/result?k={}&id={}&limit=100000",
-            intelx_url,
-            api_key,
-            search_id.unwrap()
-        )
+#[derive(Default, Clone)]
+pub struct Intelx {
+    client: Client,
+}
+
+impl Intelx {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
+
+    fn build_url(
+        &self,
+        intelx_url: &str,
+        api_key: &str,
+        querying: bool,
+        search_id: Option<&str>,
+    ) -> String {
+        if querying {
+            format!("https://{}/phonebook/search?k={}", intelx_url, api_key)
+        } else {
+            format!(
+                "https://{}/phonebook/search/result?k={}&id={}&limit=100000",
+                intelx_url,
+                api_key,
+                search_id.unwrap()
+            )
+        }
+    }
+
+    async fn get_searchid(&self, host: Arc<String>) -> Result<String> {
+        trace!("getting intelx searchid");
+        let creds = match Creds::read_creds() {
+            Ok(c) => c,
+            Err(e) => return Err(e),
+        };
+
+        let query_uri = self.build_url(&creds.url, &creds.api_key, true, None);
+        let body = Query::new(host.to_string());
+        let search_id: SearchId = self
+            .client
+            .post(&query_uri)
+            .json(&body)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        debug!("searchid: {:?}", &search_id);
+        Ok(search_id.id)
     }
 }
 
-async fn get_searchid(client: Client, host: Arc<String>) -> Result<String> {
-    trace!("getting intelx searchid");
-    let creds = match Creds::read_creds() {
-        Ok(c) => c,
-        Err(e) => return Err(e),
-    };
+#[async_trait]
+impl DataSource for Intelx {
+    async fn run(&self, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from intelx for: {}", &host);
+        let creds = match Creds::read_creds() {
+            Ok(creds) => creds,
+            Err(e) => return Err(e),
+        };
 
-    let query_uri = build_url(&creds.url, &creds.api_key, true, None);
-    let body = Query::new(host.to_string());
-    let search_id: SearchId = client
-        .post(&query_uri)
-        .json(&body)
-        .send()
-        .await?
-        .json()
-        .await?;
+        let search_id = self.get_searchid(host.clone()).await?;
+        let uri = self.build_url(&creds.url, &creds.api_key, false, Some(&search_id));
+        let resp = self.client.get(&uri).send().await?;
 
-    debug!("searchid: {:?}", &search_id);
-    Ok(search_id.id)
-}
-
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from intelx for: {}", &host);
-    let creds = match Creds::read_creds() {
-        Ok(creds) => creds,
-        Err(e) => return Err(e),
-    };
-
-    let search_id = get_searchid(client.clone(), host.clone()).await?;
-    let uri = build_url(&creds.url, &creds.api_key, false, Some(&search_id));
-    let resp = client.get(&uri).send().await?;
-
-    if resp.status().is_client_error() {
-        warn!("got status: {} for intelx", resp.status().as_str());
-        Err(Error::auth_error("intelx"))
-    } else {
-        let resp: IntelxResults = resp.json().await?;
-        let subdomains = resp.subdomains();
-        debug!("intelx response: {:?}", &resp);
-
-        if !subdomains.is_empty() {
-            info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
+        if resp.status().is_client_error() {
+            warn!("got status: {} for intelx", resp.status().as_str());
+            Err(Error::auth_error("intelx"))
         } else {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("Intelx", host))
+            let resp: IntelxResults = resp.json().await?;
+            let subdomains = resp.subdomains();
+            debug!("intelx response: {:?}", &resp);
+
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                let _ = sender.send(subdomains).await?;
+                Ok(())
+            } else {
+                warn!("No results for: {}", &host);
+                Err(Error::source_error("Intelx", host))
+            }
         }
     }
 }
@@ -144,16 +165,13 @@ pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
     #[tokio::test]
     #[ignore]
     async fn search_id() {
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!();
-        let id = get_searchid(client, host).await.unwrap();
+        let id = Intelx::default().get_searchid(host).await.unwrap();
         assert!(!id.is_empty())
     }
 
@@ -163,8 +181,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = Intelx::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -177,8 +194,7 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
+        let res = Intelx::default().run(host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

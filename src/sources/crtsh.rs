@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -17,26 +18,40 @@ impl IntoSubdomain for Vec<CrtshResult> {
     }
 }
 
-fn build_url(host: &str) -> String {
-    format!("https://crt.sh/?q=%.{}&output=json", host)
+#[derive(Default)]
+pub struct Crtsh {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from crt.sh for: {}", &host);
-    let uri = build_url(&host);
-    let resp: Option<Vec<CrtshResult>> = client.get(&uri).send().await?.json().await?;
-    debug!("crt.sh response: {:?}", &resp);
+impl Crtsh {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    match resp {
-        Some(data) => {
-            let subdomains = data.subdomains();
-            info!("Discovered {} results for: {}", subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
-        }
-        None => {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("Crt.sh", host))
+    fn build_url(&self, host: &str) -> String {
+        format!("https://crt.sh/?q=%.{}&output=json", host)
+    }
+}
+
+#[async_trait]
+impl DataSource for Crtsh {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from crt.sh for: {}", &host);
+        let uri = self.build_url(&host);
+        let resp: Option<Vec<CrtshResult>> = self.client.get(&uri).send().await?.json().await?;
+        debug!("crt.sh response: {:?}", &resp);
+
+        match resp {
+            Some(data) => {
+                let subdomains = data.subdomains();
+                info!("Discovered {} results for: {}", subdomains.len(), &host);
+                let _ = tx.send(subdomains).await?;
+                Ok(())
+            }
+            None => {
+                warn!("No results for: {}", &host);
+                Err(Error::source_error("Crt.sh", host))
+            }
         }
     }
 }
@@ -44,14 +59,12 @@ pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
         let correct_uri = "https://crt.sh/?q=%.hackerone.com&output=json";
-        assert_eq!(correct_uri, build_url("hackerone.com"));
+        assert_eq!(correct_uri, Crtsh::default().build_url("hackerone.com"));
     }
 
     #[ignore]
@@ -59,8 +72,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!();
-        let _ = run(client, host, tx).await;
+        let _ = Crtsh::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -73,8 +85,7 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!();
-        let res = run(client, host, tx).await;
+        let res = Crtsh::default().run(host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),

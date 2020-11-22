@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
@@ -42,40 +43,54 @@ impl IntoSubdomain for C99Result {
     }
 }
 
-fn build_url(host: &str, api_key: &str) -> String {
-    format!(
-        "https://api.c99.nl/subdomainfinder?key={}&domain={}&json",
-        api_key, host
-    )
+#[derive(Default)]
+pub struct C99 {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from C99 for: {}", &host);
-    let api_key = match Creds::read_creds() {
-        Ok(creds) => creds.key,
-        Err(e) => return Err(e),
-    };
+impl C99 {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    let uri = build_url(&host, &api_key);
-    let resp = client.get(&uri).send().await?;
+    fn build_url(&self, host: &str, api_key: &str) -> String {
+        format!(
+            "https://api.c99.nl/subdomainfinder?key={}&domain={}&json",
+            api_key, host
+        )
+    }
+}
 
-    //TODO: not sure about this logic.
-    if resp.status().is_client_error() {
-        warn!(
-            "got status: {} from c99, you may have hit rate limits",
-            resp.status().as_str()
-        );
-        Err(Error::auth_error("c99"))
-    } else {
-        let resp: C99Result = resp.json().await?;
-        let subdomains = resp.subdomains();
-        if !subdomains.is_empty() {
-            info!("Discovered {} results for {}", &subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
+#[async_trait]
+impl DataSource for C99 {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from C99 for: {}", &host);
+        let api_key = match Creds::read_creds() {
+            Ok(creds) => creds.key,
+            Err(e) => return Err(e),
+        };
+
+        let uri = self.build_url(&host, &api_key);
+        let resp = self.client.get(&uri).send().await?;
+
+        //TODO: not sure about this logic.
+        if resp.status().is_client_error() {
+            warn!(
+                "got status: {} from c99, you may have hit rate limits",
+                resp.status().as_str()
+            );
+            Err(Error::auth_error("c99"))
         } else {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("C99", host))
+            let resp: C99Result = resp.json().await?;
+            let subdomains = resp.subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for {}", &subdomains.len(), &host);
+                let _ = tx.send(subdomains).await?;
+                Ok(())
+            } else {
+                warn!("No results for: {}", &host);
+                Err(Error::source_error("C99", host))
+            }
         }
     }
 }
@@ -83,8 +98,6 @@ pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
     #[ignore]
@@ -92,8 +105,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = C99::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -106,8 +118,7 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
+        let res = C99::default().run(host, tx).await;
         let e = res.unwrap_err();
         assert_eq!(
             e.to_string(),
