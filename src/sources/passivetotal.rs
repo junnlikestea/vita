@@ -77,7 +77,7 @@ impl PassiveTotal {
 
 #[async_trait]
 impl DataSource for PassiveTotal {
-    async fn run(&self, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
         trace!("fetching data from passivetotal for: {}", &host);
         let creds = match Creds::from_env() {
             Ok(c) => c,
@@ -104,12 +104,12 @@ impl DataSource for PassiveTotal {
 
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                sender.send(subdomains).await;
+                let _ = tx.send(subdomains).await;
                 return Ok(());
             }
         }
 
-        warn!("No results for {} from PassiveTotal", &host);
+        warn!("no results for {} from PassiveTotal", &host);
         Err(VitaError::SourceError("PassiveTotal".into()))
     }
 }
@@ -117,7 +117,9 @@ impl DataSource for PassiveTotal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
+
     // Checks to see if the run function returns subdomains
     #[tokio::test]
     #[ignore]
@@ -137,11 +139,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = PassiveTotal::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "PassiveTotal couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            PassiveTotal::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

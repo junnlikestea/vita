@@ -39,7 +39,7 @@ impl CertSpotter {
 
 #[async_trait]
 impl DataSource for CertSpotter {
-    async fn run(&self, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
         trace!("fetching data from certspotter for: {}", &host);
         let uri = self.build_url(&host);
         let resp: Option<Vec<CertSpotterResult>> =
@@ -49,12 +49,12 @@ impl DataSource for CertSpotter {
             let subdomains = data.subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                sender.send(subdomains).await;
+                let _ = tx.send(subdomains).await;
                 return Ok(());
             }
         }
 
-        warn!("No results for: {}", &host);
+        warn!("no results for {} from CertSpotter", &host);
         Err(VitaError::SourceError("CertSpotter".into()))
     }
 }
@@ -62,6 +62,7 @@ impl DataSource for CertSpotter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
@@ -91,11 +92,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = CertSpotter::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "CertSpotter couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            CertSpotter::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

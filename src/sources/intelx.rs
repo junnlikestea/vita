@@ -149,12 +149,12 @@ impl DataSource for Intelx {
             let subdomains = resp.subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                tx.send(subdomains).await;
+                let _ = tx.send(subdomains).await;
                 return Ok(());
             }
         }
 
-        warn!("No results for {} from Intelx", &host);
+        warn!("no results for {} from Intelx", &host);
         Err(VitaError::SourceError("Intelx".into()))
     }
 }
@@ -162,6 +162,7 @@ impl DataSource for Intelx {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[tokio::test]
@@ -191,11 +192,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = Intelx::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Intelx couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            Intelx::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

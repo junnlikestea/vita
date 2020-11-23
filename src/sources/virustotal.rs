@@ -58,11 +58,11 @@ impl DataSource for VirusTotal {
         let subdomains = resp.subdomains();
         if !subdomains.is_empty() {
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            tx.send(subdomains).await;
+            let _ = tx.send(subdomains).await;
             return Ok(());
         }
 
-        warn!("No results found for {}", &host);
+        warn!("no results found for {} from VirusTotal", &host);
         Err(VitaError::SourceError("VirusTotal".into()))
     }
 }
@@ -70,6 +70,7 @@ impl DataSource for VirusTotal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     // IGNORE by default since we have limited api calls.
@@ -91,11 +92,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = VirusTotal::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "VirusTotal couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            VirusTotal::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

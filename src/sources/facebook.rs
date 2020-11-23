@@ -111,7 +111,7 @@ impl DataSource for Facebook {
             let subdomains = data.subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for {}", &subdomains.len(), &host);
-                tx.send(subdomains).await;
+                let _ = tx.send(subdomains).await;
                 return Ok(());
             }
         }
@@ -124,6 +124,7 @@ impl DataSource for Facebook {
 mod tests {
     use super::*;
     use crate::client;
+    use matches::matches;
     use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
@@ -142,10 +143,10 @@ mod tests {
     #[ignore]
     #[test]
     fn get_no_creds() {
-        let creds = Creds::read_creds();
-        let e = creds.unwrap_err();
-        let correct_msg = r#"Couldn't read ["FB_APP_ID", "FB_APP_SECRET"] for Facebook. Check if you have them set."#;
-        assert_eq!(e.to_string(), correct_msg);
+        assert!(matches!(
+            Creds::read_creds().err().unwrap(),
+            VitaError::UnsetKeys(_)
+        ));
     }
 
     // Checks if we can authenticate with Facebook.
@@ -182,11 +183,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = Facebook::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Facebook couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            Facebook::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

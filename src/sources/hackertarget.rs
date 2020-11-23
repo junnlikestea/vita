@@ -52,11 +52,11 @@ impl DataSource for HackerTarget {
         if resp != API_ERROR {
             let subdomains = HTResult::new(resp).subdomains();
             info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            tx.send(subdomains).await;
+            let _ = tx.send(subdomains).await;
             return Ok(());
         }
 
-        warn!("No results found for: {} from HackerTarget", &host);
+        warn!("no results found for {} from HackerTarget", &host);
         Err(VitaError::SourceError("HackerTarget".into()))
     }
 }
@@ -64,6 +64,7 @@ impl DataSource for HackerTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     // Checks to see if the run function returns subdomains
@@ -83,11 +84,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = HackerTarget::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "HTResult couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            HackerTarget::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

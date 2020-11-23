@@ -55,18 +55,19 @@ impl DataSource for AlienVault {
         if resp.count != 0 {
             let subdomains = resp.subdomains();
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            tx.send(subdomains).await;
-            Ok(())
-        } else {
-            warn!("No results for: {}", &host);
-            Err(VitaError::SourceError("AlienVault".into()))
+            let _ = tx.send(subdomains).await;
+            return Ok(());
         }
+
+        warn!("No results for {} from AlienVault", &host);
+        Err(VitaError::SourceError("AlienVault".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
@@ -98,10 +99,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        match AlienVault::default().run(host, tx).await {
-            Ok(_) => (),
-            Err(VitaError::SourceError(e)) => println!("got error we wanted"),
-            Err(_) => (),
-        }
+        assert!(matches!(
+            AlienVault::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ))
     }
 }

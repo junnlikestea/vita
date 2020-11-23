@@ -89,12 +89,12 @@ impl DataSource for Spyse {
             if let Some(data) = resp {
                 let subdomains = data.subdomains();
                 info!("Discovered {} results for {}", &subdomains.len(), &host);
-                tx.send(subdomains).await;
+                let _ = tx.send(subdomains).await;
                 return Ok(());
             }
         }
 
-        warn!("No results for: {} from Spyse", &host);
+        warn!("no results for {} from Spyse", &host);
         Err(VitaError::SourceError("Spyse".into()))
     }
 }
@@ -102,6 +102,7 @@ impl DataSource for Spyse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
@@ -130,11 +131,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = Spyse::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Spyse couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            Spyse::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

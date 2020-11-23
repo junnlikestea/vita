@@ -53,12 +53,12 @@ impl DataSource for Sublister {
             let subdomains = SublisterResult::new(data.as_array().unwrap().to_owned()).subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for {}", &subdomains.len(), &host);
-                tx.send(subdomains).await;
+                let _ = tx.send(subdomains).await;
                 return Ok(());
             }
         }
 
-        warn!("No results for: {} from Sublist3r", &host);
+        warn!("no results for {} from Sublist3r", &host);
         Err(VitaError::SourceError("Sublist3r".into()))
     }
 }
@@ -66,6 +66,7 @@ impl DataSource for Sublister {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
@@ -92,11 +93,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = Sublister::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Sublist3r couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            Sublister::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

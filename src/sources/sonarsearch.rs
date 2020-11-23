@@ -27,11 +27,11 @@ impl DataSource for SonarSearch {
 
         if !subdomains.is_empty() {
             info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            tx.send(subdomains).await;
+            let _ = tx.send(subdomains).await;
             return Ok(());
         }
 
-        warn!("No results for: {}", &host);
+        warn!("no results for {} SonarSearch", &host);
         Err(VitaError::SourceError("SonarSearch".into()))
     }
 }
@@ -39,6 +39,7 @@ impl DataSource for SonarSearch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[ignore]
@@ -59,11 +60,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = SonarSearch::default().run(host, tx).await;
-        let e = results.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "SonarSearch couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            SonarSearch::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

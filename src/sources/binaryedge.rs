@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::env;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{info, trace};
+use tracing::{info, trace, warn};
 
 struct Creds {
     token: String,
@@ -98,10 +98,11 @@ impl DataSource for BinaryEdge {
 
         info!("Discovered {} results for: {}", results.len(), &host);
         if !results.is_empty() {
-            tx.send(results).await;
+            let _ = tx.send(results).await;
             return Ok(());
         }
 
+        warn!("no results for {} from BinaryEdge", &host);
         Err(VitaError::SourceError("BinaryEdge".into()))
     }
 }
@@ -132,9 +133,9 @@ async fn next_page(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
+
     // Tests passed locally, ignoring for now.
     #[tokio::test]
     #[ignore]
@@ -154,12 +155,10 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = BinaryEdge::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "BinaryEdge couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            BinaryEdge::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ))
     }
 
     #[tokio::test]
@@ -167,12 +166,9 @@ mod tests {
     async fn handle_auth_error() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = BinaryEdge::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Couldn't authenticate or have hit rate-limits to the BinaryEdge API"
-        );
+        assert!(matches!(
+            BinaryEdge::default().run(host, tx).await.err().unwrap(),
+            VitaError::AuthError(_)
+        ));
     }
 }
