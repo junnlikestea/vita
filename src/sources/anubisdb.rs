@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -28,7 +28,7 @@ impl IntoSubdomain for AnubisResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AnubisDB {
     client: Client,
 }
@@ -50,24 +50,17 @@ impl DataSource for AnubisDB {
         let uri = self.build_url(&host);
         let resp: Option<Value> = self.client.get(&uri).send().await?.json().await?;
 
-        match resp {
-            Some(d) => {
-                let subdomains = AnubisResult::new(d).subdomains();
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                    let _ = tx.send(subdomains).await?;
-                    Ok(())
-                } else {
-                    warn!("No results for: {}", &host);
-                    Err(Error::source_error("AnubisDB", host))
-                }
-            }
-
-            None => {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("AnubisDB", host))
+        if let Some(data) = resp {
+            let subdomains = AnubisResult::new(data).subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for: {}", &host);
+        Err(VitaError::SourceError("AnubisDB".into()))
     }
 }
 
@@ -95,6 +88,7 @@ mod tests {
         assert!(!results.is_empty());
     }
 
+    //TODO: should match VitaError not string message
     #[tokio::test]
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);

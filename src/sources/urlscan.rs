@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -31,7 +31,7 @@ impl IntoSubdomain for UrlScanResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct UrlScan {
     client: Client,
 }
@@ -53,24 +53,17 @@ impl DataSource for UrlScan {
         let uri = self.build_url(&host);
         let resp: Option<UrlScanResult> = self.client.get(&uri).send().await?.json().await?;
 
-        match resp {
-            Some(d) => {
-                let subdomains = d.subdomains();
-
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                    if let Err(e) = tx.send(subdomains).await {
-                        error!("got error {} when sending to channel", e)
-                    }
-                    Ok(())
-                } else {
-                    warn!("No results found for: {}", &host);
-                    Err(Error::source_error("UrlScan", host))
-                }
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                tx.send(subdomains).await;
+                return Ok(());
             }
-
-            None => Err(Error::source_error("UrlScan", host)),
         }
+
+        warn!("No results found for: {} from UrlScan", &host);
+        Err(VitaError::SourceError("UrlScan".into()))
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -20,16 +20,12 @@ impl Creds {
         dotenv().ok();
         let key = env::var("PASSIVETOTAL_KEY");
         let secret = env::var("PASSIVETOTAL_SECRET");
-        if key.is_ok() && secret.is_ok() {
-            Ok(Self {
-                key: key?,
-                secret: secret?,
-            })
-        } else {
-            Err(Error::key_error(
-                "PassiveTotal",
-                &["PASSIVETOTAL_KEY", "PASSIVETOTAL_SECRET"],
-            ))
+        match (key, secret) {
+            (Ok(k), Ok(s)) => Ok(Self { key: k, secret: s }),
+            _ => Err(VitaError::UnsetKeys(vec![
+                "PASSIVETOTAL_KEY".into(),
+                "PASSIVETOTAL_SECRET".into(),
+            ])),
         }
     }
 }
@@ -64,7 +60,7 @@ impl IntoSubdomain for PassiveTotalResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PassiveTotal {
     client: Client,
 }
@@ -101,20 +97,20 @@ impl DataSource for PassiveTotal {
 
         if resp.status().is_client_error() {
             warn!("got status: {} from passivetotal", resp.status().as_str());
-            Err(Error::auth_error("passivetotal"))
+            return Err(VitaError::AuthError("Passivetotal".into()));
         } else {
             let resp: PassiveTotalResult = resp.json().await?;
             let subdomains = resp.subdomains();
 
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                let _ = sender.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("PassiveTotal", host))
+                sender.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for {} from PassiveTotal", &host);
+        Err(VitaError::SourceError("PassiveTotal".into()))
     }
 }
 

@@ -1,5 +1,5 @@
-use crate::error::Error;
 use crate::error::Result;
+use crate::error::VitaError;
 use crate::DataSource;
 use async_trait::async_trait;
 use crobat::Crobat;
@@ -21,18 +21,18 @@ impl SonarSearch {
 
 #[async_trait]
 impl DataSource for SonarSearch {
-    async fn run(&self, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
         let mut client = Crobat::new().await;
         let subdomains = client.get_subs(host.clone()).await?;
 
         if !subdomains.is_empty() {
             info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
-        } else {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("SonarSearch", host))
+            tx.send(subdomains).await;
+            return Ok(());
         }
+
+        warn!("No results for: {}", &host);
+        Err(VitaError::SourceError("SonarSearch".into()))
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -55,11 +55,11 @@ impl DataSource for AlienVault {
         if resp.count != 0 {
             let subdomains = resp.subdomains();
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            let _ = &mut tx.send(subdomains).await?;
+            tx.send(subdomains).await;
             Ok(())
         } else {
             warn!("No results for: {}", &host);
-            Err(Error::source_error("AlienVault", host))
+            Err(VitaError::SourceError("AlienVault".into()))
         }
     }
 }
@@ -98,11 +98,10 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let res = AlienVault::default().run(host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "AlienVault couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        match AlienVault::default().run(host, tx).await {
+            Ok(_) => (),
+            Err(VitaError::SourceError(e)) => println!("got error we wanted"),
+            Err(_) => (),
+        }
     }
 }

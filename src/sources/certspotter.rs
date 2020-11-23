@@ -1,11 +1,11 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 #[derive(Debug, Deserialize)]
 struct CertSpotterResult {
@@ -44,23 +44,18 @@ impl DataSource for CertSpotter {
         let uri = self.build_url(&host);
         let resp: Option<Vec<CertSpotterResult>> =
             self.client.get(&uri).send().await?.json().await?;
-        debug!("certspotter response: {:?}", &resp);
 
-        match resp {
-            Some(data) => {
-                let subdomains = data.subdomains();
-
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                    let _ = sender.send(subdomains).await?;
-                    Ok(())
-                } else {
-                    warn!("No results for: {}", &host);
-                    Err(Error::source_error("CertSpotter", host))
-                }
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                sender.send(subdomains).await;
+                return Ok(());
             }
-            _ => Err(Error::source_error("CertSpotter", host)),
         }
+
+        warn!("No results for: {}", &host);
+        Err(VitaError::SourceError("CertSpotter".into()))
     }
 }
 

@@ -1,11 +1,11 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::value::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 struct SublisterResult {
     items: Vec<Value>,
@@ -49,24 +49,17 @@ impl DataSource for Sublister {
         let uri = self.build_url(&host);
         let resp: Option<Value> = self.client.get(&uri).send().await?.json().await?;
 
-        debug!("sublister resp: {:?}", &resp);
-        match resp {
-            Some(d) => {
-                let subdomains =
-                    SublisterResult::new(d.as_array().unwrap().to_owned()).subdomains();
-
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for {}", &subdomains.len(), &host);
-                    let _ = tx.send(subdomains).await?;
-                    Ok(())
-                } else {
-                    warn!("No results for: {}", &host);
-                    Err(Error::source_error("Sublist3r", host))
-                }
+        if let Some(data) = resp {
+            let subdomains = SublisterResult::new(data.as_array().unwrap().to_owned()).subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for {}", &subdomains.len(), &host);
+                tx.send(subdomains).await;
+                return Ok(());
             }
-
-            None => Err(Error::source_error("Sublist3r", host)),
         }
+
+        warn!("No results for: {} from Sublist3r", &host);
+        Err(VitaError::SourceError("Sublist3r".into()))
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -20,13 +20,12 @@ impl Creds {
         let api_key = env::var("INTELX_KEY");
         let url = env::var("INTELX_URL");
 
-        if api_key.is_ok() && url.is_ok() {
-            Ok(Self {
-                url: url?,
-                api_key: api_key?,
-            })
-        } else {
-            Err(Error::key_error("Intelx", &["INTELX_URL", "INTELX_KEY"]))
+        match (api_key, url) {
+            (Ok(k), Ok(u)) => Ok(Self { url: u, api_key: k }),
+            _ => Err(VitaError::UnsetKeys(vec![
+                "INTELX_URL".into(),
+                "INTELX_KEY".into(),
+            ])),
         }
     }
 }
@@ -131,7 +130,7 @@ impl Intelx {
 
 #[async_trait]
 impl DataSource for Intelx {
-    async fn run(&self, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
         trace!("fetching data from intelx for: {}", &host);
         let creds = match Creds::read_creds() {
             Ok(creds) => creds,
@@ -144,21 +143,19 @@ impl DataSource for Intelx {
 
         if resp.status().is_client_error() {
             warn!("got status: {} for intelx", resp.status().as_str());
-            Err(Error::auth_error("intelx"))
+            return Err(VitaError::AuthError("Intelx".into()));
         } else {
             let resp: IntelxResults = resp.json().await?;
             let subdomains = resp.subdomains();
-            debug!("intelx response: {:?}", &resp);
-
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                let _ = sender.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("Intelx", host))
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for {} from Intelx", &host);
+        Err(VitaError::SourceError("Intelx".into()))
     }
 }
 

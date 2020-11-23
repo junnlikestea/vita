@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -18,7 +18,7 @@ impl Creds {
         dotenv().ok();
         match env::var("C99_KEY") {
             Ok(key) => Ok(Self { key }),
-            Err(_) => Err(Error::key_error("C99", &["C99_KEY"])),
+            Err(_) => Err(VitaError::UnsetKeys(vec!["C99_KEY".into()])),
         }
     }
 }
@@ -43,7 +43,7 @@ impl IntoSubdomain for C99Result {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct C99 {
     client: Client,
 }
@@ -73,25 +73,18 @@ impl DataSource for C99 {
         let uri = self.build_url(&host, &api_key);
         let resp = self.client.get(&uri).send().await?;
 
-        //TODO: not sure about this logic.
-        if resp.status().is_client_error() {
-            warn!(
-                "got status: {} from c99, you may have hit rate limits",
-                resp.status().as_str()
-            );
-            Err(Error::auth_error("c99"))
-        } else {
+        if resp.status().is_success() {
             let resp: C99Result = resp.json().await?;
             let subdomains = resp.subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for {}", &subdomains.len(), &host);
-                let _ = tx.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("C99", host))
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for: {}", &host);
+        Err(VitaError::SourceError("C99".into()))
     }
 }
 

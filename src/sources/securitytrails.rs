@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -18,7 +18,7 @@ impl Creds {
         dotenv().ok();
         match env::var("SECURITY_TRAILS_KEY") {
             Ok(api_key) => Ok(Self { api_key }),
-            Err(_) => Err(Error::key_error("SecurityTrails", &["SECURITY_TRAILS_KEY"])),
+            Err(_) => Err(VitaError::UnsetKeys(vec!["SECURITY_TRAILS_KEY".into()])),
         }
     }
 }
@@ -39,7 +39,7 @@ impl IntoSubdomain for SecTrailsResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct SecurityTrails {
     client: Client,
 }
@@ -74,25 +74,25 @@ impl DataSource for SecurityTrails {
             .header("apikey", api_key)
             .send()
             .await?;
+
         if resp.status().is_client_error() {
             warn!(
                 "got status: {} from security trails",
                 resp.status().as_str()
             );
-            Err(Error::auth_error("securitytrails"))
+            return Err(VitaError::AuthError("SecurityTrails".into()));
         } else {
             let resp: Option<SecTrailsResult> = resp.json().await?;
-
-            if resp.is_some() {
-                let subdomains = resp.unwrap().subdomains();
+            if let Some(data) = resp {
+                let subdomains = data.subdomains();
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                let _ = tx.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("SecurityTrails", host))
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for {} from SecurityTrails", &host);
+        Err(VitaError::SourceError("SecurityTrails".into()))
     }
 }
 

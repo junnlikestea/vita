@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -16,21 +16,20 @@ struct Creds {
 }
 
 impl Creds {
-    pub fn read_creds() -> Result<Self> {
+    pub fn read_creds<'a>() -> Result<Self> {
         dotenv().ok();
         let app_id = env::var("FB_APP_ID");
         let app_secret = env::var("FB_APP_SECRET");
 
-        if app_id.is_ok() && app_secret.is_ok() {
-            Ok(Self {
-                app_id: app_id?,
-                app_secret: app_secret?,
-            })
-        } else {
-            Err(Error::key_error(
-                "Facebook",
-                &["FB_APP_ID", "FB_APP_SECRET"],
-            ))
+        match (app_id, app_secret) {
+            (Ok(id), Ok(secret)) => Ok(Self {
+                app_id: id,
+                app_secret: secret,
+            }),
+            _ => Err(VitaError::UnsetKeys(vec![
+                "FB_APP_ID".into(),
+                "FB_APP_SECRET".into(),
+            ])),
         }
     }
 
@@ -54,7 +53,7 @@ impl Creds {
         if let Some(r) = resp {
             Ok(r.access_token)
         } else {
-            Err(Error::auth_error("Facebook"))
+            Err(VitaError::AuthError("Facebook".into()))
         }
     }
 }
@@ -102,34 +101,23 @@ impl DataSource for Facebook {
     async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
         let access_token = match Creds::read_creds() {
             Ok(c) => c.authenticate(self.client.clone()).await?,
-            Err(_) => {
-                warn!("Couldn't authenticate to Facebook, ignoring");
-                return Err(Error::key_error(
-                    "Facebook",
-                    &["FB_APP_ID", "FB_APP_SECRET"],
-                ));
-            }
+            Err(e) => return Err(e),
         };
 
         let uri = self.build_url(&host, &access_token);
         let resp: Option<FacebookResult> = self.client.get(&uri).send().await?.json().await?;
 
-        match resp {
-            Some(data) => {
-                let subdomains = data.subdomains();
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for {}", &subdomains.len(), &host);
-                    let _ = tx.send(subdomains).await?;
-                    Ok(())
-                } else {
-                    Err(Error::source_error("Facebook", host))
-                }
-            }
-            None => {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("Facebook", host))
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for {}", &subdomains.len(), &host);
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("got no results for {} from Facebook", host);
+        Err(VitaError::SourceError("Facebook".into()))
     }
 }
 #[cfg(test)]

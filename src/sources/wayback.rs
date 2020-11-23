@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -55,24 +55,18 @@ impl DataSource for Wayback {
         trace!("fetching data from wayback for: {}", &host);
         let uri = self.build_url(&host);
         let resp: Option<Value> = self.client.get(&uri).send().await?.json().await?;
-        match resp {
-            Some(data) => {
-                let subdomains = WaybackResult::new(data).subdomains();
 
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                    if let Err(e) = tx.send(subdomains).await {
-                        error!("got error {} when trying to send to channel", e)
-                    }
-                    Ok(())
-                } else {
-                    warn!("No results found for: {}", &host);
-                    Err(Error::source_error("Wayback Machine", host))
-                }
+        if let Some(data) = resp {
+            let subdomains = WaybackResult::new(data).subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                tx.send(subdomains).await;
+                return Ok(());
             }
-
-            None => Err(Error::source_error("Wayback Machine", host)),
         }
+
+        warn!("No results found for: {}", &host);
+        Err(VitaError::SourceError("Wayback Machine".into()))
     }
 }
 

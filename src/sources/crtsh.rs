@@ -1,11 +1,11 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 #[derive(Deserialize, Hash, PartialEq, Debug, Eq)]
 struct CrtshResult {
@@ -18,7 +18,7 @@ impl IntoSubdomain for Vec<CrtshResult> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Crtsh {
     client: Client,
 }
@@ -39,20 +39,18 @@ impl DataSource for Crtsh {
         trace!("fetching data from crt.sh for: {}", &host);
         let uri = self.build_url(&host);
         let resp: Option<Vec<CrtshResult>> = self.client.get(&uri).send().await?.json().await?;
-        debug!("crt.sh response: {:?}", &resp);
 
-        match resp {
-            Some(data) => {
-                let subdomains = data.subdomains();
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
+            if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", subdomains.len(), &host);
-                let _ = tx.send(subdomains).await?;
-                Ok(())
-            }
-            None => {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("Crt.sh", host))
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for: {}", &host);
+        Err(VitaError::SourceError("Crt.sh".into()))
     }
 }
 

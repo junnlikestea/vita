@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -44,22 +44,17 @@ impl DataSource for ThreatMiner {
         let uri = self.build_url(&host);
         let resp: Option<ThreatminerResult> = self.client.get(&uri).send().await?.json().await?;
 
-        match resp {
-            Some(d) => {
-                let subdomains = d.subdomains();
-
-                if !subdomains.is_empty() {
-                    info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                    let _ = tx.send(subdomains).await?;
-                    Ok(())
-                } else {
-                    warn!("No results found for: {}", &host);
-                    Err(Error::source_error("ThreatMiner", host))
-                }
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                tx.send(subdomains).await;
+                return Ok(());
             }
-
-            None => Err(Error::source_error("ThreatMiner", host)),
         }
+
+        warn!("No results found for: {}", &host);
+        Err(VitaError::SourceError("ThreatMiner".into()))
     }
 }
 

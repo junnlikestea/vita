@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -27,7 +27,7 @@ impl IntoSubdomain for VirustotalResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct VirusTotal {
     client: Client,
 }
@@ -54,18 +54,16 @@ impl DataSource for VirusTotal {
         trace!("fetching data from virustotal for: {}", &host);
         let uri = self.build_url(&host);
         let resp: VirustotalResult = self.client.get(&uri).send().await?.json().await?;
-        let subdomains = resp.subdomains();
 
+        let subdomains = resp.subdomains();
         if !subdomains.is_empty() {
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            if let Err(e) = tx.send(subdomains).await {
-                error!("got error {} when sending to channel", e)
-            }
-            Ok(())
-        } else {
-            warn!("No results found for {}", &host);
-            Err(Error::source_error("VirusTotal", host))
+            tx.send(subdomains).await;
+            return Ok(());
         }
+
+        warn!("No results found for {}", &host);
+        Err(VitaError::SourceError("VirusTotal".into()))
     }
 }
 

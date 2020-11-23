@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -19,7 +19,7 @@ impl Creds {
         dotenv().ok();
         match env::var("CHAOS_KEY") {
             Ok(key) => Ok(Self { key }),
-            Err(_) => Err(Error::key_error("Chaos", &["CHAOS_KEY"])),
+            Err(_) => Err(VitaError::UnsetKeys(vec!["CHAOS_KEY".into()])),
         }
     }
 }
@@ -39,7 +39,7 @@ impl IntoSubdomain for ChaosResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Chaos {
     client: Client,
 }
@@ -62,8 +62,6 @@ impl DataSource for Chaos {
             Ok(creds) => creds.key,
             Err(e) => return Err(e),
         };
-
-        //TODO: add info on if authenticaiton failed.
         let uri = self.build_url(&host);
         let resp = self
             .client
@@ -71,23 +69,22 @@ impl DataSource for Chaos {
             .header(AUTHORIZATION, api_key)
             .send()
             .await?;
-        //debug!("projectdiscovery chaos response: {:#?}", &resp);
 
         if resp.status().is_client_error() {
             warn!("got status: {} from chaos", resp.status().as_str());
-            Err(Error::auth_error("chaos"))
+            return Err(VitaError::AuthError("Chaos".into()));
         } else {
             let resp: ChaosResult = resp.json().await?;
             let subdomains = resp.subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                let _ = tx.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("Chaos", host))
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for: {}", &host);
+        Err(VitaError::SourceError("Chaos".into()))
     }
 }
 

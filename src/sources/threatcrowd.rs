@@ -1,11 +1,11 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 #[derive(Debug, Deserialize)]
 struct ThreatCrowdResult {
@@ -48,15 +48,14 @@ impl DataSource for ThreatCrowd {
         let resp: ThreatCrowdResult = self.client.get(&uri).send().await?.json().await?;
         let subdomains = resp.subdomains();
 
-        debug!("threatcrowd response: {:?}", &resp);
         if !subdomains.is_empty() {
             info!("Discovered {} results for {}", &subdomains.len(), &host);
-            let _ = tx.send(subdomains).await?;
-            Ok(())
-        } else {
-            warn!("No results found for: {}", &host);
-            Err(Error::source_error("ThreatCrowd", host))
+            tx.send(subdomains).await;
+            return Ok(());
         }
+
+        warn!("No results found for: {} from Threatcrowd", &host);
+        Err(VitaError::SourceError("ThreatCrowd".into()))
     }
 }
 

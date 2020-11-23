@@ -1,5 +1,5 @@
-use crate::error::Error;
 use crate::error::Result;
+use crate::error::VitaError;
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -19,7 +19,7 @@ impl Creds {
         dotenv().ok();
         match env::var("BINARYEDGE_TOKEN") {
             Ok(token) => Ok(Self { token }),
-            Err(_) => Err(Error::key_error("BinaryEdge", &["BINARYEDGE_TOKEN"])),
+            Err(_) => Err(VitaError::UnsetKeys(vec!["BINARYEDGE_TOKEN".into()])),
         }
     }
 }
@@ -38,7 +38,7 @@ impl IntoSubdomain for BinaryEdgeResponse {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct BinaryEdge {
     client: Client,
 }
@@ -98,11 +98,11 @@ impl DataSource for BinaryEdge {
 
         info!("Discovered {} results for: {}", results.len(), &host);
         if !results.is_empty() {
-            let _ = tx.send(results).await?;
-            Ok(())
-        } else {
-            Err(Error::source_error("BinaryEdge", host))
+            tx.send(results).await;
+            return Ok(());
         }
+
+        Err(VitaError::SourceError("BinaryEdge".into()))
     }
 }
 
@@ -113,7 +113,6 @@ async fn next_page(
 ) -> Result<BinaryEdgeResponse> {
     trace!("fetching a page from binaryedge for: {}", &host);
     let uri = BinaryEdge::default().build_url(&host, page);
-
     let token = match Creds::read_creds() {
         Ok(creds) => creds.token,
         Err(e) => return Err(e),
@@ -121,14 +120,13 @@ async fn next_page(
 
     let resp = client.get(&uri).header("X-Key", token).send().await?;
 
-    // Should probably add cleaner match arms, but this will do for now.
     if resp.status().is_success() {
         let be: BinaryEdgeResponse = resp.json().await?;
-        Ok(be)
-    } else {
-        info!("binaryedge returned authentication error");
-        Err(Error::auth_error("BinaryEdge"))
+        return Ok(be);
     }
+
+    info!("binaryedge returned authentication error");
+    Err(VitaError::AuthError("BinaryEdge".into()))
 }
 
 #[cfg(test)]

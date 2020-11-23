@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use dotenv::dotenv;
@@ -19,7 +19,7 @@ impl Creds {
         dotenv().ok();
         match env::var("SPYSE_TOKEN") {
             Ok(token) => Ok(Self { token }),
-            Err(_) => Err(Error::key_error("Spyse", &["SPYSE_TOKEN"])),
+            Err(_) => Err(VitaError::UnsetKeys(vec!["SPYSE_TOKEN".into()])),
         }
     }
 }
@@ -45,7 +45,7 @@ impl IntoSubdomain for SpyseResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Spyse {
     client: Client,
 }
@@ -83,20 +83,19 @@ impl DataSource for Spyse {
 
         if resp.status().is_client_error() {
             warn!("got status: {} from spyse", resp.status().as_str());
-            Err(Error::auth_error("Spyse"))
+            return Err(VitaError::AuthError("Spyse".into()));
         } else {
             let resp: Option<SpyseResult> = resp.json().await?;
-
-            if resp.is_some() {
-                let subdomains = resp.unwrap().subdomains();
+            if let Some(data) = resp {
+                let subdomains = data.subdomains();
                 info!("Discovered {} results for {}", &subdomains.len(), &host);
-                tx.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results for: {}", &host);
-                Err(Error::source_error("Spyse", host))
+                tx.send(subdomains).await;
+                return Ok(());
             }
         }
+
+        warn!("No results for: {} from Spyse", &host);
+        Err(VitaError::SourceError("Spyse".into()))
     }
 }
 

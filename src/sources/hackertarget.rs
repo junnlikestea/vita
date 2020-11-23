@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, VitaError};
 use crate::{DataSource, IntoSubdomain};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -27,7 +27,7 @@ impl IntoSubdomain for HTResult {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct HackerTarget {
     client: Client,
 }
@@ -48,17 +48,16 @@ impl DataSource for HackerTarget {
         trace!("fetching data from hackertarget for: {}", &host);
         let uri = self.build_url(&host);
         let resp: String = self.client.get(&uri).send().await?.text().await?;
-        debug!("hackertarget response: {:?}", &resp);
 
         if resp != API_ERROR {
             let subdomains = HTResult::new(resp).subdomains();
             info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            let _ = tx.send(subdomains).await?;
-            Ok(())
-        } else {
-            warn!("No results found for: {}", &host);
-            Err(Error::source_error("HTResult", host))
+            tx.send(subdomains).await;
+            return Ok(());
         }
+
+        warn!("No results found for: {} from HackerTarget", &host);
+        Err(VitaError::SourceError("HackerTarget".into()))
     }
 }
 
