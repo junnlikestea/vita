@@ -16,7 +16,6 @@ async fn main() -> Result<()> {
     let mut hosts: HashSet<String> = HashSet::new();
     let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
     let timeout: u64 = matches.value_of("timeout").unwrap().parse()?;
-    let all_sources = matches.is_present("all_sources");
 
     if matches.is_present("verbosity") {
         let builder = tracing_subscriber::fmt()
@@ -35,15 +34,32 @@ async fn main() -> Result<()> {
         hosts = read_input(None)?;
     }
 
-    let runner = Runner::new(all_sources, max_concurrent, timeout);
-    let mut cleaner = PostProcessor::new();
+    let mut cleaner = PostProcessor::default();
     if matches.is_present("subs-only") {
-        cleaner
-            .any_subdomain(&hosts)
-            .clean(runner.run(hosts).await?)?;
+        cleaner.any_subdomain(&hosts);
     } else {
-        cleaner.any_root(&hosts).clean(runner.run(hosts).await?)?;
+        cleaner.any_root(&hosts);
     }
+
+    let runner = Runner::default();
+    if matches.is_present("all_sources") {
+        let subdomains = runner
+            .concurrency(max_concurrent)
+            .timeout(timeout)
+            .all_sources()
+            .run(hosts)
+            .await?;
+        cleaner.clean(subdomains)?
+    } else {
+        let subdomains = runner
+            .concurrency(max_concurrent)
+            .timeout(timeout)
+            .free_sources()
+            .run(hosts)
+            .await?;
+        cleaner.clean(subdomains)?
+    }
+
     Ok(())
 }
 

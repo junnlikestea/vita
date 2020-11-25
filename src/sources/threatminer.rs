@@ -1,5 +1,6 @@
-use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::error::{Result, VitaError};
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -18,47 +19,58 @@ impl IntoSubdomain for ThreatminerResult {
     }
 }
 
-pub fn build_url(host: &str) -> String {
-    format!(
-        "https://api.threatminer.org/v2/domain.php?q={}&api=True&rt=5",
-        host
-    )
+#[derive(Default, Clone)]
+pub struct ThreatMiner {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from threatminer for: {}", &host);
-    let uri = build_url(&host);
-    let resp: Option<ThreatminerResult> = client.get(&uri).send().await?.json().await?;
+impl ThreatMiner {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    match resp {
-        Some(d) => {
-            let subdomains = d.subdomains();
+    fn build_url(&self, host: &str) -> String {
+        format!(
+            "https://api.threatminer.org/v2/domain.php?q={}&api=True&rt=5",
+            host
+        )
+    }
+}
 
+#[async_trait]
+impl DataSource for ThreatMiner {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from threatminer for: {}", &host);
+        let uri = self.build_url(&host);
+        let resp: Option<ThreatminerResult> = self.client.get(&uri).send().await?.json().await?;
+
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                let _ = sender.send(subdomains).await?;
-                Ok(())
-            } else {
-                warn!("No results found for: {}", &host);
-                Err(Error::source_error("ThreatMiner", host))
+                let _ = tx.send(subdomains).await;
+                return Ok(());
             }
         }
 
-        None => Err(Error::source_error("ThreatMiner", host)),
+        warn!("no results found for {} from ThreatMiner", &host);
+        Err(VitaError::SourceError("ThreatMiner".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
         let correct_uri = "https://api.threatminer.org/v2/domain.php?q=hackerone.com&api=True&rt=5";
-        assert_eq!(correct_uri, build_url("hackerone.com"));
+        assert_eq!(
+            correct_uri,
+            ThreatMiner::default().build_url("hackerone.com")
+        );
     }
 
     // Checks to see if the run function returns subdomains
@@ -66,8 +78,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = ThreatMiner::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -80,12 +91,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "ThreatMiner couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            ThreatMiner::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

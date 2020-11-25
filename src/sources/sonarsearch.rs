@@ -1,27 +1,45 @@
-use crate::error::Error;
 use crate::error::Result;
+use crate::error::VitaError;
+use crate::DataSource;
+use async_trait::async_trait;
 use crobat::Crobat;
+use reqwest::Client;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tracing::{info, warn};
 
-pub async fn run(host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    let mut client = Crobat::new().await;
-    let subdomains = client.get_subs(host.clone()).await?;
+#[derive(Default, Clone)]
+pub struct SonarSearch {
+    client: Client,
+}
 
-    if !subdomains.is_empty() {
-        info!("Discovered {} results for: {}", &subdomains.len(), &host);
-        let _ = sender.send(subdomains).await?;
-        Ok(())
-    } else {
-        warn!("No results for: {}", &host);
-        Err(Error::source_error("SonarSearch", host))
+impl SonarSearch {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
+}
+
+#[async_trait]
+impl DataSource for SonarSearch {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        let mut client = Crobat::new().await;
+        let subdomains = client.get_subs(host.clone()).await?;
+
+        if !subdomains.is_empty() {
+            info!("Discovered {} results for: {}", &subdomains.len(), &host);
+            let _ = tx.send(subdomains).await;
+            return Ok(());
+        }
+
+        warn!("no results for {} SonarSearch", &host);
+        Err(VitaError::SourceError("SonarSearch".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[ignore]
@@ -29,7 +47,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let _ = run(host, tx).await.unwrap();
+        let _ = SonarSearch::default().run(host, tx).await.unwrap();
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -42,11 +60,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_owned());
-        let results = run(host, tx).await;
-        let e = results.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "SonarSearch couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            SonarSearch::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

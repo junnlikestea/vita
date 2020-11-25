@@ -1,10 +1,11 @@
-use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::error::{Result, VitaError};
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::value::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{error, info, trace, warn};
+use tracing::{info, trace, warn};
 use url::Url;
 
 struct WaybackResult {
@@ -32,43 +33,50 @@ impl IntoSubdomain for WaybackResult {
     }
 }
 
-fn build_url(host: &str) -> String {
-    format!(
-        "https://web.archive.org/cdx/search/cdx?url=*.{}/*&output=json\
-    &fl=original&collapse=urlkey&limit=100000",
-        host
-    )
+#[derive(Default, Clone)]
+pub struct Wayback {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from wayback for: {}", &host);
-    let uri = build_url(&host);
-    let resp: Option<Value> = client.get(&uri).send().await?.json().await?;
-    match resp {
-        Some(data) => {
-            let subdomains = WaybackResult::new(data).subdomains();
+impl Wayback {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
+    fn build_url(&self, host: &str) -> String {
+        format!(
+            "https://web.archive.org/cdx/search/cdx?url=*.{}/*&output=json\
+    &fl=original&collapse=urlkey&limit=100000",
+            host
+        )
+    }
+}
+
+#[async_trait]
+impl DataSource for Wayback {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from wayback for: {}", &host);
+        let uri = self.build_url(&host);
+        let resp: Option<Value> = self.client.get(&uri).send().await?.json().await?;
+
+        if let Some(data) = resp {
+            let subdomains = WaybackResult::new(data).subdomains();
             if !subdomains.is_empty() {
                 info!("Discovered {} results for: {}", &subdomains.len(), &host);
-                if let Err(e) = sender.send(subdomains).await {
-                    error!("got error {} when trying to send to channel", e)
-                }
-                Ok(())
-            } else {
-                warn!("No results found for: {}", &host);
-                Err(Error::source_error("Wayback Machine", host))
+                let _ = tx.send(subdomains).await;
+                return Ok(());
             }
         }
 
-        None => Err(Error::source_error("Wayback Machine", host)),
+        warn!("no results found for {} from Wayback Machine", &host);
+        Err(VitaError::SourceError("Wayback Machine".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
@@ -76,7 +84,7 @@ mod tests {
         let correct_uri =
             "https://web.archive.org/cdx/search/cdx?url=*.hackerone.com/*&output=json\
     &fl=original&collapse=urlkey&limit=100000";
-        assert_eq!(correct_uri, build_url("hackerone.com"));
+        assert_eq!(correct_uri, Wayback::default().build_url("hackerone.com"));
     }
 
     #[ignore] // hangs forever on windows for some reasons?
@@ -84,8 +92,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(20);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = Wayback::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -98,12 +105,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Wayback Machine couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            Wayback::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

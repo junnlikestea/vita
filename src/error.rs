@@ -1,91 +1,82 @@
-use std::error;
-use std::fmt;
-use std::sync::Arc;
+use std::error::Error;
+use std::fmt::{self, Formatter};
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+pub type Result<T> = std::result::Result<T, VitaError>;
 
-#[derive(Clone, Debug)]
-pub struct Error {
-    kind: ErrorKind,
+#[derive(Debug)]
+pub enum VitaError {
+    SourceError(String),
+    AuthError(String),
+    UnsetKeys(Vec<String>),
+    ReqwestError(reqwest::Error),
+    JoinError(tokio::task::JoinError),
+    IoError(std::io::Error),
+    Msg(String),
+    ParseError,
+    CrobatError,
+    EmptyResults,
 }
 
-#[derive(Clone, Debug)]
-pub enum ErrorKind {
-    SourceError {
-        source: String,
-        host: Arc<String>,
-    },
-    AuthError {
-        source: String,
-    },
-    KeyError {
-        source: String,
-        env_variables: Vec<String>,
-    },
-}
-
-impl Error {
-    pub fn kind(&self) -> &ErrorKind {
-        &self.kind
-    }
-
-    pub(crate) fn source_error(source: &str, host: Arc<String>) -> Box<Error> {
-        let source = source.to_string();
-        Box::new(Error {
-            kind: ErrorKind::SourceError { source, host },
-        })
-    }
-
-    pub(crate) fn auth_error(source: &str) -> Box<Error> {
-        let source = source.to_string();
-        Box::new(Error {
-            kind: ErrorKind::AuthError { source },
-        })
-    }
-
-    pub(crate) fn key_error(source: &str, envs: &[&str]) -> Box<Error> {
-        let source = source.to_string();
-        let env_variables = envs.iter().map(|s| s.to_string()).collect();
-        Box::new(Error {
-            kind: ErrorKind::KeyError {
-                source,
-                env_variables,
-            },
-        })
-    }
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match self.kind {
-            ErrorKind::SourceError { .. } => "there was an error retrieving data from the source",
-            ErrorKind::AuthError { .. } => {
-                "there was an error authenticating or you may have reached rate-limits."
+impl fmt::Display for VitaError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            VitaError::SourceError(s) => write!(f, "couldn't fetch data from {}", s),
+            VitaError::AuthError(s) => {
+                write!(
+                    f,
+                    "error authenticating to {} or may have hit rate limits",
+                    s
+                )
             }
-            ErrorKind::KeyError { .. } => "error reading environment variables",
+            VitaError::UnsetKeys(v) => write!(f, "error reading environment variables {:?}", v),
+            VitaError::EmptyResults => write!(f, "returned no results"),
+            VitaError::CrobatError => {
+                write!(f, "got error when trying to pull results from crobat")
+            }
+            VitaError::ParseError => write!(f, "got error trying to parse cli args"),
+            VitaError::Msg(s) => write!(f, "got error {}", s),
+            VitaError::ReqwestError(ref err) => err.fmt(f),
+            VitaError::JoinError(ref err) => err.fmt(f),
+            VitaError::IoError(ref err) => err.fmt(f),
         }
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.kind {
-            ErrorKind::SourceError { source, host } => {
-                write!(f, "{} couldn't find any results for: {}", source, host,)
-            }
-            ErrorKind::AuthError { source } => write!(
-                f,
-                "Couldn't authenticate or have hit rate-limits for {}",
-                source
-            ),
-            ErrorKind::KeyError {
-                source,
-                env_variables,
-            } => write!(
-                f,
-                "Couldn't read {:?} for {}. Check if you have them set.",
-                env_variables, source
-            ),
-        }
+impl Error for VitaError {}
+
+impl From<String> for VitaError {
+    fn from(err: String) -> Self {
+        VitaError::Msg(err)
+    }
+}
+
+impl From<reqwest::Error> for VitaError {
+    fn from(err: reqwest::Error) -> Self {
+        VitaError::ReqwestError(err)
+    }
+}
+
+impl From<tokio::task::JoinError> for VitaError {
+    fn from(err: tokio::task::JoinError) -> Self {
+        VitaError::JoinError(err)
+    }
+}
+
+impl From<std::io::Error> for VitaError {
+    fn from(err: std::io::Error) -> Self {
+        VitaError::IoError(err)
+    }
+}
+
+impl From<std::num::ParseIntError> for VitaError {
+    fn from(_: std::num::ParseIntError) -> Self {
+        VitaError::ParseError
+    }
+}
+
+// Monkey patch until I add custom error type to Crobat
+impl From<Box<dyn Error + Sync + std::marker::Send>> for VitaError {
+    fn from(_: Box<dyn Error + Sync + std::marker::Send>) -> Self {
+        VitaError::CrobatError
     }
 }

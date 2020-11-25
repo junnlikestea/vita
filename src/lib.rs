@@ -1,15 +1,24 @@
+#![allow(clippy::rc_buffer)]
+
 use addr::DomainName;
+use async_trait::async_trait;
 use error::Result;
-use futures::future::BoxFuture;
-use futures::future::FutureExt;
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 use reqwest::Client;
-use sources::*;
+use sources::{
+    alienvault::AlienVault, anubisdb::AnubisDB, binaryedge::BinaryEdge, c99::C99,
+    certspotter::CertSpotter, chaos::Chaos, crtsh::Crtsh, facebook::Facebook,
+    hackertarget::HackerTarget, intelx::Intelx, passivetotal::PassiveTotal,
+    securitytrails::SecurityTrails, sonarsearch::SonarSearch, spyse::Spyse, sublister::Sublister,
+    threatcrowd::ThreatCrowd, threatminer::ThreatMiner, urlscan::UrlScan, virustotal::VirusTotal,
+    wayback::Wayback,
+};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::sync::Mutex;
-use tracing::{error, info};
+use tokio::sync::{mpsc, Mutex};
+use tracing::{info, warn};
 
 pub mod error;
 pub mod sources;
@@ -17,143 +26,130 @@ pub mod sources;
 const QUEUE_SIZE: usize = 100_000;
 const CHAN_SIZE: usize = 255;
 
+trait IntoSubdomain {
+    fn subdomains(&self) -> Vec<String>;
+}
+
+#[async_trait]
+trait DataSource: Send + Sync {
+    async fn run(&self, host: Arc<String>, mut tx: mpsc::Sender<Vec<String>>) -> Result<()>;
+}
+
 // Configuration options for the `Runner`
 struct Config {
-    // Use paid and free sources
-    include_all: bool,
+    timeout: u64,
     // The maximum number of conurrent tasks
     concurrency: usize,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            timeout: 15,
+            concurrency: 200,
+        }
+    }
+}
+
 // The `Runner` is responsible for collecting data from all the sources.
 pub struct Runner {
-    config: Config,
     client: Client,
+    sources: Vec<Arc<dyn DataSource>>,
+    config: Config,
+}
+
+impl Default for Runner {
+    fn default() -> Self {
+        let config = Config::default();
+        Self {
+            client: client!(config.timeout, config.timeout),
+            sources: Vec::new(),
+            config,
+        }
+    }
 }
 
 impl Runner {
-    pub fn new(include_all: bool, concurrency: usize, timeout: u64) -> Self {
-        let config = Config {
-            include_all,
-            concurrency,
-        };
-
-        Self {
-            config,
-            client: client!(timeout, timeout),
-        }
+    /// Sets the limit of concurrent tasks
+    pub fn concurrency(mut self, limit: usize) -> Self {
+        self.config.concurrency = limit;
+        self
     }
 
-    /// Collects data from the sources which don't require an API key.
-    async fn free(&self, host: Arc<String>, mut sender: mpsc::Sender<Vec<String>>) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel(self.config.concurrency);
+    /// Sets the request timeout
+    pub fn timeout(mut self, duration: u64) -> Self {
+        self.config.timeout = duration;
+        self
+    }
 
-        // TODO: Is there a better way to do this?
-        let sources: Vec<BoxFuture<Result<()>>> = vec![
-            anubisdb::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            alienvault::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            certspotter::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            crtsh::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            threatcrowd::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            urlscan::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            virustotal::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            threatminer::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            sublister::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            wayback::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            hackertarget::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            sonarsearch::run(host.clone(), tx).boxed(),
+    /// Sets the sources to be all those which do not require an api key to use.
+    pub fn free_sources(mut self) -> Self {
+        // Client uses Arc internally so we're just cloning pointers
+        let free: Vec<Arc<dyn DataSource>> = vec![
+            Arc::new(AnubisDB::new(self.client.clone())),
+            Arc::new(AlienVault::new(self.client.clone())),
+            Arc::new(CertSpotter::new(self.client.clone())),
+            Arc::new(Crtsh::new(self.client.clone())),
+            Arc::new(ThreatCrowd::new(self.client.clone())),
+            Arc::new(UrlScan::new(self.client.clone())),
+            Arc::new(VirusTotal::new(self.client.clone())),
+            Arc::new(ThreatMiner::new(self.client.clone())),
+            Arc::new(Sublister::new(self.client.clone())),
+            Arc::new(Wayback::new(self.client.clone())),
+            Arc::new(HackerTarget::new(self.client.clone())),
+            Arc::new(SonarSearch::new(self.client.clone())),
         ];
 
-        let producer = tokio::spawn(async move {
-            for s in sources {
-                tokio::spawn(async move { s.await });
-            }
-        });
-
-        let consumer = tokio::spawn(async move {
-            while let Some(v) = rx.recv().await {
-                if let Err(e) = sender.send(v).await {
-                    error!("got error {} when sending to channel", e)
-                }
-            }
-        });
-
-        producer.await?;
-        consumer.await?;
-        Ok(())
+        self.sources.extend(free.into_iter());
+        self
     }
 
-    // Collects data from paid and free sources.
-    async fn all(
-        self: Arc<Self>,
-        host: Arc<String>,
-        mut sender: mpsc::Sender<Vec<String>>,
-    ) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel(self.config.concurrency);
-        let sources: Vec<BoxFuture<Result<()>>> = vec![
-            anubisdb::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            binaryedge::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            alienvault::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            certspotter::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            threatcrowd::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            virustotal::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            threatminer::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            sublister::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            passivetotal::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            hackertarget::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            urlscan::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            crtsh::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            wayback::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            facebook::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            spyse::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            c99::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            intelx::run(self.client.clone(), host.clone(), tx.clone()).boxed(),
-            sonarsearch::run(host.clone(), tx.clone()).boxed(),
-            chaos::run(self.client.clone(), host.clone(), tx).boxed(),
+    /// Sets the sources to include api keys in addition to the free sources.
+    pub fn all_sources(mut self) -> Self {
+        let all: Vec<Arc<dyn DataSource>> = vec![
+            Arc::new(AnubisDB::new(self.client.clone())),
+            Arc::new(AlienVault::new(self.client.clone())),
+            Arc::new(CertSpotter::new(self.client.clone())),
+            Arc::new(Crtsh::new(self.client.clone())),
+            Arc::new(ThreatCrowd::new(self.client.clone())),
+            Arc::new(UrlScan::new(self.client.clone())),
+            Arc::new(VirusTotal::new(self.client.clone())),
+            Arc::new(ThreatMiner::new(self.client.clone())),
+            Arc::new(Sublister::new(self.client.clone())),
+            Arc::new(SecurityTrails::new(self.client.clone())),
+            Arc::new(Wayback::new(self.client.clone())),
+            Arc::new(HackerTarget::new(self.client.clone())),
+            Arc::new(SonarSearch::new(self.client.clone())),
+            Arc::new(BinaryEdge::new(self.client.clone())),
+            Arc::new(PassiveTotal::new(self.client.clone())),
+            Arc::new(Facebook::new(self.client.clone())),
+            Arc::new(Spyse::new(self.client.clone())),
+            Arc::new(C99::new(self.client.clone())),
+            Arc::new(Intelx::new(self.client.clone())),
+            Arc::new(Chaos::new(self.client.clone())),
         ];
 
-        let producer = tokio::spawn(async move {
-            for s in sources {
-                tokio::spawn(async { s.await });
-            }
-        });
-
-        let consumer = tokio::spawn(async move {
-            while let Some(v) = rx.recv().await {
-                if let Err(e) = sender.send(v).await {
-                    error!("got error {} when sending to channel", e)
-                }
-            }
-        });
-
-        producer.await?;
-        consumer.await?;
-        Ok(())
+        self.sources.extend(all.into_iter());
+        self
     }
 
-    /// Takes a collection of hosts and spawns a new task to collect data from the free or paid
-    /// sources for each host.
+    /// Fetches data from the sources concurrently
     pub async fn run<T>(self, hosts: T) -> Result<Vec<String>>
     where
         T: IntoIterator<Item = String>,
     {
-        use futures::stream::StreamExt;
-
         let (tx, mut rx) = mpsc::channel::<Vec<String>>(CHAN_SIZE);
         let subdomains = Arc::new(Mutex::new(Vec::new()));
-        let runner = Arc::new(self);
+        let sources = Arc::new(self.sources);
 
         // Consumer thread which pushes results into a queue and writes them to the output vec
         // periodically
         let subs = Arc::clone(&subdomains);
         let consumer = tokio::spawn(async move {
-            info!("spawning consumer thread");
             let mut queue = Vec::with_capacity(QUEUE_SIZE);
-
             while let Some(v) = rx.recv().await {
-                // if the buffer reaches capacity then empty it into the subdomains vec.
+                // if the queue reaches capacity then empty it into the subdomains vec.
                 if queue.len() == QUEUE_SIZE {
-                    info!("queue reached capacity writing to results vec");
                     let mut lock = subs.lock().await;
                     lock.extend(queue.drain(..));
                 };
@@ -170,28 +166,30 @@ impl Runner {
             }
         });
 
-        let producer = futures::stream::iter(hosts)
-            .map(|host| {
-                let h = Arc::new(host);
+        let mut futures = FuturesUnordered::new();
+        let mut outs = Vec::new();
+        for host in hosts.into_iter() {
+            let host = Arc::new(host);
+            if futures.len() >= self.config.concurrency {
+                outs.push(futures.next().await.unwrap());
+            }
+
+            for source in sources.iter() {
+                let source = Arc::clone(source);
+                let host = Arc::clone(&host);
                 let tx = tx.clone();
-                let runner = Arc::clone(&runner);
-                if runner.config.include_all {
-                    tokio::spawn(async move {
-                        info!("spawning task for {}", &h);
-                        runner.all(h, tx).await
-                    })
-                } else {
-                    tokio::spawn(async move {
-                        info!("spawning task for {}", &h);
-                        runner.free(h, tx).await
-                    })
-                }
-            })
-            .buffer_unordered(runner.config.concurrency)
-            .collect::<Vec<_>>();
+                futures.push(tokio::spawn(async move { source.run(host, tx).await }));
+            }
+        }
+
+        // Get the remaining futures
+        while let Some(res) = futures.next().await {
+            if let Err(e) = res {
+                warn!("got error {} when trying to recv remaining futures", e)
+            }
+        }
 
         // explicitly drop the remaning sender
-        producer.await;
         drop(tx);
         consumer.await?;
         let res = Arc::try_unwrap(subdomains).unwrap();
@@ -214,14 +212,15 @@ pub struct PostProcessor {
     filter: Filter,
 }
 
-impl PostProcessor {
-    pub fn new() -> Self {
+impl Default for PostProcessor {
+    fn default() -> Self {
         Self {
             roots: HashSet::new(),
             filter: Filter::RootOnly,
         }
     }
-
+}
+impl PostProcessor {
     /// Sets the `PostProcessor` to return any result which matches the same root domain
     pub fn any_root(&mut self, hosts: &HashSet<String>) -> &mut Self {
         self.roots = hosts
@@ -262,7 +261,10 @@ impl PostProcessor {
                     false
                 }
             }
-            Filter::SubOnly => self.roots.iter().any(|root| domain.ends_with(root)),
+            Filter::SubOnly => self
+                .roots
+                .iter()
+                .any(|root| domain.ends_with(root) && !domain.eq(root)),
         }
     }
 
@@ -284,10 +286,6 @@ impl PostProcessor {
     }
 }
 
-trait IntoSubdomain {
-    fn subdomains(&self) -> Vec<String>;
-}
-
 #[macro_export]
 //https://stackoverflow.com/questions/24047686/default-function-arguments-in-rust
 macro_rules! client {
@@ -300,7 +298,7 @@ macro_rules! client {
     };
     () => {
         reqwest::ClientBuilder::new()
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(20))
             .pool_idle_timeout(Duration::from_secs(20))
             .build()
             .unwrap()

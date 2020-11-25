@@ -1,5 +1,6 @@
-use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::error::{Result, VitaError};
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
@@ -17,7 +18,7 @@ impl Creds {
         dotenv().ok();
         match env::var("SECURITY_TRAILS_KEY") {
             Ok(api_key) => Ok(Self { api_key }),
-            Err(_) => Err(Error::key_error("SecurityTrails", &["SECURITY_TRAILS_KEY"])),
+            Err(_) => Err(VitaError::UnsetKeys(vec!["SECURITY_TRAILS_KEY".into()])),
         }
     }
 }
@@ -38,55 +39,76 @@ impl IntoSubdomain for SecTrailsResult {
     }
 }
 
-fn build_url(host: &str) -> String {
-    format!(
-        "https://api.securitytrails.com/v1/domain/{}/subdomains",
-        host
-    )
+#[derive(Default, Clone)]
+pub struct SecurityTrails {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    trace!("fetching data from securitytrails for: {}", &host);
+impl SecurityTrails {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    let api_key = match Creds::read_creds() {
-        Ok(creds) => creds.api_key,
-        Err(e) => return Err(e),
-    };
+    fn build_url(&self, host: &str) -> String {
+        format!(
+            "https://api.securitytrails.com/v1/domain/{}/subdomains",
+            host
+        )
+    }
+}
 
-    let uri = build_url(&host);
-    let resp = client.get(&uri).header("apikey", api_key).send().await?;
-    if resp.status().is_client_error() {
-        warn!(
-            "got status: {} from security trails",
-            resp.status().as_str()
-        );
-        Err(Error::auth_error("securitytrails"))
-    } else {
-        let resp: Option<SecTrailsResult> = resp.json().await?;
+#[async_trait]
+impl DataSource for SecurityTrails {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        trace!("fetching data from securitytrails for: {}", &host);
 
-        if resp.is_some() {
-            let subdomains = resp.unwrap().subdomains();
-            info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            let _ = sender.send(subdomains).await?;
-            Ok(())
+        let api_key = match Creds::read_creds() {
+            Ok(creds) => creds.api_key,
+            Err(e) => return Err(e),
+        };
+
+        let uri = self.build_url(&host);
+        let resp = self
+            .client
+            .get(&uri)
+            .header("apikey", api_key)
+            .send()
+            .await?;
+
+        if resp.status().is_client_error() {
+            warn!(
+                "got status: {} from security trails",
+                resp.status().as_str()
+            );
+            return Err(VitaError::AuthError("SecurityTrails".into()));
         } else {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("SecurityTrails", host))
+            let resp: Option<SecTrailsResult> = resp.json().await?;
+            if let Some(data) = resp {
+                let subdomains = data.subdomains();
+                info!("Discovered {} results for: {}", &subdomains.len(), &host);
+                let _ = tx.send(subdomains).await;
+                return Ok(());
+            }
         }
+
+        warn!("no results for {} from SecurityTrails", &host);
+        Err(VitaError::SourceError("SecurityTrails".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
-    use std::time::Duration;
+    use matches::matches;
     use tokio::sync::mpsc::channel;
 
     #[test]
     fn url_builder() {
         let correct_uri = "https://api.securitytrails.com/v1/domain/hackerone.com/subdomains";
-        assert_eq!(correct_uri, build_url("hackerone.com"));
+        assert_eq!(
+            correct_uri,
+            SecurityTrails::default().build_url("hackerone.com")
+        );
     }
 
     // Checks to see if the run function returns subdomains
@@ -95,8 +117,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!(25, 25);
-        let _ = run(client, host, tx).await;
+        let _ = SecurityTrails::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -110,12 +131,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!(25, 25);
-        let res = run(client, host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "SecurityTrails couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            SecurityTrails::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

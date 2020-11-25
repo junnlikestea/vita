@@ -1,5 +1,6 @@
-use crate::error::{Error, Result};
-use crate::IntoSubdomain;
+use crate::error::{Result, VitaError};
+use crate::{DataSource, IntoSubdomain};
+use async_trait::async_trait;
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::Deserialize;
@@ -20,16 +21,15 @@ impl Creds {
         let app_id = env::var("FB_APP_ID");
         let app_secret = env::var("FB_APP_SECRET");
 
-        if app_id.is_ok() && app_secret.is_ok() {
-            Ok(Self {
-                app_id: app_id?,
-                app_secret: app_secret?,
-            })
-        } else {
-            Err(Error::key_error(
-                "Facebook",
-                &["FB_APP_ID", "FB_APP_SECRET"],
-            ))
+        match (app_id, app_secret) {
+            (Ok(id), Ok(secret)) => Ok(Self {
+                app_id: id,
+                app_secret: secret,
+            }),
+            _ => Err(VitaError::UnsetKeys(vec![
+                "FB_APP_ID".into(),
+                "FB_APP_SECRET".into(),
+            ])),
         }
     }
 
@@ -53,7 +53,7 @@ impl Creds {
         if let Some(r) = resp {
             Ok(r.access_token)
         } else {
-            Err(Error::auth_error("Facebook"))
+            Err(VitaError::AuthError("Facebook".into()))
         }
     }
 }
@@ -77,50 +77,54 @@ impl IntoSubdomain for FacebookResult {
     }
 }
 
-fn build_url(host: &str, token: &str) -> String {
-    format!(
-        "https://graph.facebook.com/certificates?fields=domains&access_token={}&query=*.{}",
-        token, host
-    )
+//TODO: creds should probably be provided on Facebook::new
+#[derive(Default, Clone)]
+pub struct Facebook {
+    client: Client,
 }
 
-pub async fn run(client: Client, host: Arc<String>, mut sender: Sender<Vec<String>>) -> Result<()> {
-    let access_token = match Creds::read_creds() {
-        Ok(c) => c.authenticate(client.clone()).await?,
-        Err(_) => {
-            warn!("Couldn't authenticate to Facebook, ignoring");
-            return Err(Error::key_error(
-                "Facebook",
-                &["FB_APP_ID", "FB_APP_SECRET"],
-            ));
-        }
-    };
+impl Facebook {
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
 
-    let uri = build_url(&host, &access_token);
-    let resp: Option<FacebookResult> = client.get(&uri).send().await?.json().await?;
-
-    match resp {
-        Some(data) => {
-            let subdomains = data.subdomains();
-            if !subdomains.is_empty() {
-                info!("Discovered {} results for {}", &subdomains.len(), &host);
-                let _ = sender.send(subdomains).await?;
-                Ok(())
-            } else {
-                Err(Error::source_error("Facebook", host))
-            }
-        }
-        None => {
-            warn!("No results for: {}", &host);
-            Err(Error::source_error("Facebook", host))
-        }
+    fn build_url(&self, host: &str, token: &str) -> String {
+        format!(
+            "https://graph.facebook.com/certificates?fields=domains&access_token={}&query=*.{}",
+            token, host
+        )
     }
 }
 
+#[async_trait]
+impl DataSource for Facebook {
+    async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        let access_token = match Creds::read_creds() {
+            Ok(c) => c.authenticate(self.client.clone()).await?,
+            Err(e) => return Err(e),
+        };
+
+        let uri = self.build_url(&host, &access_token);
+        let resp: Option<FacebookResult> = self.client.get(&uri).send().await?.json().await?;
+
+        if let Some(data) = resp {
+            let subdomains = data.subdomains();
+            if !subdomains.is_empty() {
+                info!("Discovered {} results for {}", &subdomains.len(), &host);
+                let _ = tx.send(subdomains).await;
+                return Ok(());
+            }
+        }
+
+        warn!("got no results for {} from Facebook", host);
+        Err(VitaError::SourceError("Facebook".into()))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::client;
+    use matches::matches;
     use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
@@ -139,10 +143,10 @@ mod tests {
     #[ignore]
     #[test]
     fn get_no_creds() {
-        let creds = Creds::read_creds();
-        let e = creds.unwrap_err();
-        let correct_msg = r#"Couldn't read ["FB_APP_ID", "FB_APP_SECRET"] for Facebook. Check if you have them set."#;
-        assert_eq!(e.to_string(), correct_msg);
+        assert!(matches!(
+            Creds::read_creds().err().unwrap(),
+            VitaError::UnsetKeys(_)
+        ));
     }
 
     // Checks if we can authenticate with Facebook.
@@ -164,8 +168,7 @@ mod tests {
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
         let host = Arc::new("hackerone.com".to_owned());
-        let client = client!();
-        let _ = run(client, host, tx).await;
+        let _ = Facebook::default().run(host, tx).await;
         let mut results = Vec::new();
         for r in rx.recv().await {
             results.extend(r)
@@ -180,12 +183,9 @@ mod tests {
     async fn handle_no_results() {
         let (tx, _rx) = channel(1);
         let host = Arc::new("anVubmxpa2VzdGVh.com".to_string());
-        let client = client!();
-        let res = run(client, host, tx).await;
-        let e = res.unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "Facebook couldn't find any results for: anVubmxpa2VzdGVh.com"
-        );
+        assert!(matches!(
+            Facebook::default().run(host, tx).await.err().unwrap(),
+            VitaError::SourceError(_)
+        ));
     }
 }

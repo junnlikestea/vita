@@ -1,3 +1,5 @@
+#![allow(clippy::rc_buffer)]
+
 pub mod crobat {
     include!("../proto/pb/proto.rs");
 }
