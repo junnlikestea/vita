@@ -16,7 +16,7 @@ struct Creds {
 }
 
 impl Creds {
-    pub fn read_creds<'a>() -> Result<Self> {
+    pub fn read_creds() -> Result<Self> {
         dotenv().ok();
         let app_id = env::var("FB_APP_ID");
         let app_secret = env::var("FB_APP_SECRET");

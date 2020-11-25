@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{error, info, trace, warn};
+use tracing::{info, trace, warn};
 
 #[derive(Deserialize, Hash, Eq, PartialEq)]
 struct UrlScanPage {

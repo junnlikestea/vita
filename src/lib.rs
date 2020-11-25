@@ -1,3 +1,5 @@
+#![allow(clippy::rc_buffer)]
+
 use addr::DomainName;
 use async_trait::async_trait;
 use error::Result;
@@ -8,8 +10,9 @@ use sources::{
     alienvault::AlienVault, anubisdb::AnubisDB, binaryedge::BinaryEdge, c99::C99,
     certspotter::CertSpotter, chaos::Chaos, crtsh::Crtsh, facebook::Facebook,
     hackertarget::HackerTarget, intelx::Intelx, passivetotal::PassiveTotal,
-    sonarsearch::SonarSearch, spyse::Spyse, sublister::Sublister, threatcrowd::ThreatCrowd,
-    threatminer::ThreatMiner, urlscan::UrlScan, virustotal::VirusTotal, wayback::Wayback,
+    securitytrails::SecurityTrails, sonarsearch::SonarSearch, spyse::Spyse, sublister::Sublister,
+    threatcrowd::ThreatCrowd, threatminer::ThreatMiner, urlscan::UrlScan, virustotal::VirusTotal,
+    wayback::Wayback,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -113,6 +116,7 @@ impl Runner {
             Arc::new(VirusTotal::new(self.client.clone())),
             Arc::new(ThreatMiner::new(self.client.clone())),
             Arc::new(Sublister::new(self.client.clone())),
+            Arc::new(SecurityTrails::new(self.client.clone())),
             Arc::new(Wayback::new(self.client.clone())),
             Arc::new(HackerTarget::new(self.client.clone())),
             Arc::new(SonarSearch::new(self.client.clone())),

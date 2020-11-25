@@ -40,7 +40,7 @@ impl IntoSubdomain for SecTrailsResult {
 }
 
 #[derive(Default, Clone)]
-struct SecurityTrails {
+pub struct SecurityTrails {
     client: Client,
 }
 
