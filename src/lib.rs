@@ -261,7 +261,10 @@ impl PostProcessor {
                     false
                 }
             }
-            Filter::SubOnly => self.roots.iter().any(|root| domain.ends_with(root)),
+            Filter::SubOnly => self
+                .roots
+                .iter()
+                .any(|root| domain.ends_with(root) && !domain.eq(root)),
         }
     }
 
@@ -295,7 +298,7 @@ macro_rules! client {
     };
     () => {
         reqwest::ClientBuilder::new()
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(20))
             .pool_idle_timeout(Duration::from_secs(20))
             .build()
             .unwrap()
