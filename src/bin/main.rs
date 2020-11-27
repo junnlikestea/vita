@@ -1,12 +1,12 @@
 extern crate vita;
 use clap::{App, Arg};
+use futures::stream::StreamExt;
 use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use vita::error::Result;
-use vita::PostProcessor;
-use vita::Runner;
+use vita::{CleanExt, PostProcessor, Runner};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,23 +41,17 @@ async fn main() -> Result<()> {
         cleaner.any_root(&hosts);
     }
 
-    let runner = Runner::default();
+    let mut runner = Runner::default()
+        .concurrency(max_concurrent)
+        .timeout(timeout)
+        .free_sources();
     if matches.is_present("all_sources") {
-        let subdomains = runner
-            .concurrency(max_concurrent)
-            .timeout(timeout)
-            .all_sources()
-            .run(hosts)
-            .await?;
-        cleaner.clean(subdomains)?
-    } else {
-        let subdomains = runner
-            .concurrency(max_concurrent)
-            .timeout(timeout)
-            .free_sources()
-            .run(hosts)
-            .await?;
-        cleaner.clean(subdomains)?
+        runner = runner.all_sources();
+    }
+
+    let mut stream = runner.run(hosts).await?;
+    while let Some(v) = stream.next().await {
+        v.iter().clean(&cleaner).for_each(|r| println!("{}", r))
     }
 
     Ok(())

@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use error::Result;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
+use futures_core::stream::Stream;
 use reqwest::Client;
 use sources::{
     alienvault::AlienVault, anubisdb::AnubisDB, binaryedge::BinaryEdge, c99::C99,
@@ -17,7 +18,7 @@ use sources::{
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 pub mod error;
@@ -134,42 +135,18 @@ impl Runner {
     }
 
     /// Fetches data from the sources concurrently
-    pub async fn run<T>(self, hosts: T) -> Result<Vec<String>>
+    pub async fn run<T>(self, hosts: T) -> Result<impl Stream<Item = Vec<String>>>
     where
         T: IntoIterator<Item = String>,
     {
-        let (tx, mut rx) = mpsc::channel::<Vec<String>>(CHAN_SIZE);
-        let subdomains = Arc::new(Mutex::new(Vec::new()));
+        let (tx, rx) = mpsc::channel::<Vec<String>>(CHAN_SIZE);
         let sources = Arc::new(self.sources);
-
-        // Consumer thread which pushes results into a queue and writes them to the output vec
-        // periodically
-        let subs = Arc::clone(&subdomains);
-        let consumer = tokio::spawn(async move {
-            let mut queue = Vec::with_capacity(QUEUE_SIZE);
-            while let Some(v) = rx.recv().await {
-                // if the queue reaches capacity then empty it into the subdomains vec.
-                if queue.len() == QUEUE_SIZE {
-                    let mut lock = subs.lock().await;
-                    lock.extend(queue.drain(..));
-                };
-
-                info!("pushing {} items into the queue", &v.len());
-                queue.extend(v.into_iter());
-            }
-
-            // if anything is remaning in the queue push it into the results vec
-            if !queue.is_empty() {
-                info!("draining the last {} items out of the queue", queue.len());
-                let mut lock = subs.lock().await;
-                lock.extend(queue.drain(..));
-            }
-        });
 
         let mut futures = FuturesUnordered::new();
         let mut outs = Vec::new();
         for host in hosts.into_iter() {
             let host = Arc::new(host);
+
             if futures.len() >= self.config.concurrency {
                 outs.push(futures.next().await.unwrap());
             }
@@ -191,9 +168,7 @@ impl Runner {
 
         // explicitly drop the remaning sender
         drop(tx);
-        consumer.await?;
-        let res = Arc::try_unwrap(subdomains).unwrap();
-        Ok(res.into_inner())
+        Ok(rx)
     }
 }
 
@@ -220,6 +195,7 @@ impl Default for PostProcessor {
         }
     }
 }
+
 impl PostProcessor {
     /// Sets the `PostProcessor` to return any result which matches the same root domain
     pub fn any_root(&mut self, hosts: &HashSet<String>) -> &mut Self {
@@ -242,20 +218,21 @@ impl PostProcessor {
     /// Strips invalid characters from the domain, used before attempting to parse a domain into a
     /// `DomainName`. If we didn't strip these characters any attempt to parse a domain into
     /// `DomainName` would return `InvalidDomain` error.
-    fn strip_invalid(domain: &str) -> String {
+    fn strip_invalid<T: Into<String>>(domain: T) -> String {
         let blacklisted = vec!["\"", "\\", "*"];
         // iter over the blacklisted chars and return a string that has been cleaned.
-        blacklisted.iter().fold(domain.to_string(), |mut res, c| {
+        blacklisted.iter().fold(domain.into(), |mut res, c| {
             res = res.replace(c, "");
             res.strip_prefix('.').unwrap_or(&res).to_lowercase()
         })
     }
 
     /// Checks if a domain belongs to any of the root domains provided in the input
-    fn is_relevant(&self, domain: &str) -> bool {
+    fn is_relevant<T: AsRef<str>>(&self, domain: T) -> bool {
+        let cleaned_domain = Self::strip_invalid(domain.as_ref());
         match self.filter {
             Filter::RootOnly => {
-                if let Ok(d) = domain.parse::<DomainName>() {
+                if let Ok(d) = cleaned_domain.parse::<DomainName>() {
                     self.roots.contains(d.root().to_str())
                 } else {
                     false
@@ -264,27 +241,68 @@ impl PostProcessor {
             Filter::SubOnly => self
                 .roots
                 .iter()
-                .any(|root| domain.ends_with(root) && !domain.eq(root)),
+                .any(|root| cleaned_domain.ends_with(root) && !cleaned_domain.eq(root)),
         }
     }
 
-    /// Takes the results from the `Runner.run` and filters them for relevant subdomains. Relevant is
-    /// any result which has a root domain that was present in the input file. In other words, if you
-    /// passed in `hackerone.com` as the input it will only return subdomains that belong to that root
-    /// domain e.g. `docs.hackerone.com`
-    pub fn clean(&mut self, results: Vec<String>) -> Result<()> {
-        let filtered: HashSet<String> = results
-            .iter()
-            .flat_map(|a| a.split_whitespace())
-            .map(Self::strip_invalid)
-            .filter(|d| self.is_relevant(d))
-            .collect();
+    ///// Takes the results from the `Runner.run` and filters them for relevant subdomains.
+    /////
+    ///// TODO: explain relevant results
+    //pub fn clean(&mut self, results: Vec<String>) -> Option<Vec<String>> {
+    //    let filtered: Vec<String> = results
+    //        .iter()
+    //        .flat_map(|a| a.split_whitespace())
+    //        .map(Self::strip_invalid)
+    //        .filter(|d| self.is_relevant(d))
+    //        .collect();
 
-        filtered.iter().for_each(|r| println!("{}", r));
+    //    if !filtered.is_empty() {
+    //        return Some(filtered);
+    //    }
 
-        Ok(())
+    //    None
+    //}
+}
+
+pub struct CleanIter<'a, I>
+where
+    I: Iterator,
+{
+    cleaner: &'a PostProcessor,
+    inner: I,
+}
+
+impl<'a, I> Iterator for CleanIter<'a, I>
+where
+    I: Iterator,
+    I::Item: std::hash::Hash + Eq + Clone + AsRef<str>,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(d) = self.inner.next() {
+            if self.cleaner.is_relevant(d.as_ref()) {
+                return Some(d);
+            }
+        }
+        None
     }
 }
+
+pub trait CleanExt: Iterator {
+    fn clean(self, postprocessor: &PostProcessor) -> CleanIter<Self>
+    where
+        Self::Item: std::hash::Hash + Eq + Clone + AsRef<str>,
+        Self: Sized,
+    {
+        CleanIter {
+            cleaner: postprocessor,
+            inner: self,
+        }
+    }
+}
+
+impl<I: Iterator> CleanExt for I {}
 
 #[macro_export]
 //https://stackoverflow.com/questions/24047686/default-function-arguments-in-rust
