@@ -8,7 +8,7 @@ Vita is a tool to gather subdomains from passive sources much like [tomnomnom's 
 ### Installation
 Precompiled binaries for vita are available in the [releases](https://github.com/junnlikestea/vita/releases) tab. Just pick your platform and extract the archive that contains the binary.
 
-## Building it yourself 
+### Building it yourself 
 If you want to build it yourself you will need to install Rust, you can get the [official installation](https://www.rust-lang.org/tools/install) from the Rust website.
 
 To build Vita:
