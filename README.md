@@ -20,21 +20,48 @@ $ ./target/release/vita --version
 ```
 
 ### Usage
-With a single domain, and collect data from Apis' which don't require keys.:
+
+**With a single domain and collecting data from free sources**
+
 ```
 vita -d hackerone.com
 ```
-by default the results will be unique, and will filter subdomains not related to your root domain, or domains if you choose to supply multiple.
+By default the results will be unique, and will filter subdomains not related 
+to your root domain, or domains if you choose to supply multiple.
 
-With a list of domains from a file:
+**Collecting data only on a specific subdomain**
+
+If you only want to collect results related to a specific subdomain you can use
+the `--subs-only` flag. This will cause vita to run on the actual domain and not
+the root domain. Results will be filtered to anything that ends with the input
+domain or domains.
+```
+vita -d api.hackerone.com --subs-only
+```
+
+**With a list of domains from a file**
+
 ```
 vita -f path/to/domains.txt
 ```
 
-With a list of domains from stdin:
+**With a list of domains from stdin**
+
 ```
 vita < /path/to/domains.txt
 ```
+
+**Outputting results as they're received**
+
+You can output results as they arrive as opposed to once all sources finish using
+the `--flush` flag. You might want to use this flag when you're running vita on a
+small vps without much memory. When this flag is active vita will not remove duplicates,
+so you may want to pipe it through something like `sort -u`.
+```
+vita -d hackerone.com --flush
+```
+
+**Collecting data using paid sources**
 
 If you want to include sources which require API keys, add the `-a` or `-all` flag, for example:
 ```
@@ -114,6 +141,8 @@ vita -f /path/to/roots.txt -c 400
 ### Thanks
 [0xatul](https://twitter.com/0xatul) For constant feedback and improvement ideas.
 
+[dee-see](https://github.com/dee-see) For the contributions and neat issues!
+
 [TomNomNom](https://twitter.com/TomNomNom) For inspiring me to write and release open source tools.
 
 [Cgboal](https://twitter.com/CalumBoal) For [SonarSearch](https://github.com/Cgboal/SonarSearch) 
@@ -130,7 +159,7 @@ in time. I'll make sure to add you in the future.
 ### To-do
 * Add more paid sources.
 * Write some documentation for the underlying library that Vita uses, and prepare publish to crates.io.
-* Optimise performance further.
+* Clean up types and optimise performance further.
 
 ### Disclaimer
 Developers have/has no responsibility or authority over any kind of:
