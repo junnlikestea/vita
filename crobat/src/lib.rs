@@ -15,8 +15,6 @@ use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::Status;
 
-const QUEUE_SIZE: usize = 200;
-
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct Crobat {
@@ -49,7 +47,6 @@ impl Crobat {
         Ok(conn)
     }
 
-    // handle
     pub async fn get_subs(
         &mut self,
         host: Arc<String>,

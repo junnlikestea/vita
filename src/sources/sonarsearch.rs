@@ -27,15 +27,13 @@ impl DataSource for SonarSearch {
         let mut subs = client.get_subs(host.clone()).await?;
 
         while let Some(r) = subs.next().await {
-            let domain = r
-                .and_then(|d| Ok(d.domain))
-                .map_err(|_| VitaError::CrobatError)?;
+            let domain = r.map(|d| d.domain).map_err(|_| VitaError::CrobatError)?;
             results.push(domain);
 
             if results.len() == QUEUE_SIZE {
                 debug!("sonarsearch queue is full, sending across channel",);
                 let mut tx = tx.clone();
-                tx.send(results.drain(..).collect()).await;
+                let _ = tx.send(results.drain(..).collect()).await;
             }
         }
 
@@ -44,7 +42,7 @@ impl DataSource for SonarSearch {
                 "draining {} remaining items from sonarsearch queue",
                 results.len()
             );
-            tx.send(results.drain(..).collect()).await;
+            let _ = tx.send(results.drain(..).collect()).await;
         }
 
         Err(VitaError::SourceError("SonarSearch".into()))
