@@ -54,7 +54,7 @@ impl PostProcessor {
         domain
             .as_ref()
             .strip_prefix('.')
-            .unwrap_or(domain.as_ref())
+            .unwrap_or_else(|| domain.as_ref())
             .replace(&['"', '\"', '\\', '*'][..], "")
             .to_lowercase()
     }
