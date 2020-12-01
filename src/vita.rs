@@ -1,4 +1,3 @@
-use crate::error::Result;
 use crate::sources::{
     alienvault::AlienVault, anubisdb::AnubisDB, binaryedge::BinaryEdge, c99::C99,
     certspotter::CertSpotter, chaos::Chaos, crtsh::Crtsh, facebook::Facebook,
@@ -7,12 +6,12 @@ use crate::sources::{
     threatcrowd::ThreatCrowd, threatminer::ThreatMiner, urlscan::UrlScan, virustotal::VirusTotal,
     wayback::Wayback,
 };
-use crate::{client, DataSource};
+use crate::{client, error::Result, DataSource};
 
-use futures::stream::FuturesUnordered;
-use futures::stream::StreamExt;
+use futures::stream::{FuturesUnordered, StreamExt};
 use futures_core::stream::Stream;
 use reqwest::Client;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -118,36 +117,36 @@ impl Runner {
     }
 
     /// Fetches data from the sources concurrently
-    pub async fn run<T>(self, hosts: T) -> Result<impl Stream<Item = Vec<String>>>
-    where
-        T: IntoIterator<Item = String>,
-    {
+    pub async fn run(self, hosts: HashSet<String>) -> Result<impl Stream<Item = Vec<String>>> {
         let (tx, rx) = mpsc::channel::<Vec<String>>(CHAN_SIZE);
         let sources = Arc::new(self.sources);
+        let max_concurrent = self.config.concurrency;
 
-        let mut futures = FuturesUnordered::new();
-        let mut outs = Vec::new();
-        for host in hosts.into_iter() {
-            let host = Arc::new(host);
+        let tx2 = tx.clone();
+        tokio::spawn(async move {
+            let mut futures = FuturesUnordered::new();
+            for host in hosts.into_iter() {
+                let host = Arc::new(host);
 
-            if futures.len() >= self.config.concurrency {
-                outs.push(futures.next().await.unwrap());
+                if futures.len() >= max_concurrent {
+                    futures.next().await;
+                }
+
+                for source in sources.iter() {
+                    let source = Arc::clone(source);
+                    let host = Arc::clone(&host);
+                    let tx = tx2.clone();
+                    futures.push(tokio::spawn(async move { source.run(host, tx).await }));
+                }
             }
 
-            for source in sources.iter() {
-                let source = Arc::clone(source);
-                let host = Arc::clone(&host);
-                let tx = tx.clone();
-                futures.push(tokio::spawn(async move { source.run(host, tx).await }));
+            // Get the remaining futures
+            while let Some(res) = futures.next().await {
+                if let Err(e) = res {
+                    warn!("got error {} when trying to recv remaining futures", e)
+                }
             }
-        }
-
-        // Get the remaining futures
-        while let Some(res) = futures.next().await {
-            if let Err(e) = res {
-                warn!("got error {} when trying to recv remaining futures", e)
-            }
-        }
+        });
 
         // explicitly drop the remaning sender
         drop(tx);
