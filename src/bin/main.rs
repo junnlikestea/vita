@@ -1,68 +1,98 @@
 extern crate vita;
 use clap::{App, Arg};
+use futures::stream::StreamExt;
 use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use vita::error::Result;
-use vita::PostProcessor;
-use vita::Runner;
+use vita::{CleanExt, PostProcessor, Runner};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = create_clap_app();
-    let matches = args.get_matches();
-    // make it a hashset incase user provided duplicate domains
-    let mut hosts: HashSet<String> = HashSet::new();
-    let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
-    let timeout: u64 = matches.value_of("timeout").unwrap().parse()?;
+    let ParsedArgs {
+        runner,
+        cleaner,
+        flush,
+        hosts,
+    } = ParsedArgs::new(create_clap_app())?;
+    let mut results: HashSet<String> = HashSet::new();
 
-    if matches.is_present("verbosity") {
-        let builder = tracing_subscriber::fmt()
-            .with_env_filter(matches.value_of("verbosity").unwrap())
-            .with_filter_reloading();
-        let _handle = builder.reload_handle();
-        builder.try_init()?;
+    let mut stream = runner.run(hosts).await?;
+    while let Some(v) = stream.next().await {
+        v.iter().clean(&cleaner).for_each(|r| {
+            if flush {
+                println!("{}", r);
+            } else {
+                results.insert(r);
+            }
+        });
     }
 
-    if matches.is_present("file") {
-        let input = matches.value_of("input").unwrap();
-        hosts = read_input(Some(input))?;
-    } else if matches.is_present("domain") {
-        hosts.insert(matches.value_of("input").unwrap().to_string());
-    } else {
-        hosts = read_input(None)?;
-    }
-
-    let mut cleaner = PostProcessor::default();
-    if matches.is_present("subs-only") {
-        cleaner.any_subdomain(&hosts);
-    } else {
-        cleaner.any_root(&hosts);
-    }
-
-    let runner = Runner::default();
-    if matches.is_present("all_sources") {
-        let subdomains = runner
-            .concurrency(max_concurrent)
-            .timeout(timeout)
-            .all_sources()
-            .run(hosts)
-            .await?;
-        cleaner.clean(subdomains)?
-    } else {
-        let subdomains = runner
-            .concurrency(max_concurrent)
-            .timeout(timeout)
-            .free_sources()
-            .run(hosts)
-            .await?;
-        cleaner.clean(subdomains)?
+    if !flush {
+        results.iter().for_each(|r| println!("{}", r));
     }
 
     Ok(())
 }
 
+struct ParsedArgs {
+    runner: Runner,
+    cleaner: PostProcessor,
+    flush: bool,
+    hosts: HashSet<String>,
+}
+
+impl ParsedArgs {
+    fn new(app: clap::App<'static, 'static>) -> Result<Self> {
+        let matches = app.get_matches();
+        // make it a hashset incase user provided duplicate domains
+        let mut hosts: HashSet<String> = HashSet::new();
+        let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
+        let timeout: u64 = matches.value_of("timeout").unwrap().parse()?;
+
+        if matches.is_present("verbosity") {
+            let builder = tracing_subscriber::fmt()
+                .with_env_filter(matches.value_of("verbosity").unwrap())
+                .with_filter_reloading();
+            let _handle = builder.reload_handle();
+            builder.try_init()?;
+        }
+
+        if matches.is_present("file") {
+            let input = matches.value_of("input").unwrap();
+            hosts = read_input(Some(input))?;
+        } else if matches.is_present("domain") {
+            hosts.insert(matches.value_of("input").unwrap().to_string());
+        } else {
+            hosts = read_input(None)?;
+        }
+
+        let mut cleaner = PostProcessor::default();
+        if matches.is_present("subs-only") {
+            cleaner.any_subdomain(hosts.clone());
+        } else {
+            cleaner.any_root(hosts.clone());
+        }
+
+        let mut runner = Runner::default()
+            .concurrency(max_concurrent)
+            .timeout(timeout)
+            .free_sources();
+        if matches.is_present("all_sources") {
+            runner = runner.all_sources();
+        }
+
+        let flush = matches.is_present("flush");
+
+        Ok(Self {
+            runner,
+            cleaner,
+            flush,
+            hosts,
+        })
+    }
+}
 /// Reads input from stdin or a file
 fn read_input(path: Option<&str>) -> Result<HashSet<String>> {
     let mut contents = HashSet::new();
@@ -111,6 +141,14 @@ fn create_clap_app() -> clap::App<'static, 'static> {
             Arg::with_name("subs-only")
                 .help("filter the results to only those which have the same subdomain")
                 .long("subs-only"),
+        )
+        .arg(
+            Arg::with_name("flush")
+                .help(
+                    "Prints results to stdout as they're received. Results will still be filtered, 
+                    but no deduplication will be done",
+                )
+                .long("flush"),
         )
         .arg(
             Arg::with_name("concurrency")

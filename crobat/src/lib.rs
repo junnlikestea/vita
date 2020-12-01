@@ -8,9 +8,12 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 use crobat::crobat_client::CrobatClient;
+use crobat::Domain;
 use crobat::QueryRequest;
+use futures_core::stream::Stream;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
+use tonic::Status;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -44,21 +47,16 @@ impl Crobat {
         Ok(conn)
     }
 
-    // handle
-    pub async fn get_subs(&mut self, host: Arc<String>) -> Result<Vec<String>> {
+    pub async fn get_subs(
+        &mut self,
+        host: Arc<String>,
+    ) -> Result<impl Stream<Item = std::result::Result<Domain, Status>>> {
         trace!("querying crobat client for subdomains");
-        let mut subdomains = Vec::new();
         let request = tonic::Request::new(QueryRequest {
             query: host.to_string(),
         });
-        debug!("{:?}", &request);
+        let stream = self.client.get_subdomains(request).await?.into_inner();
 
-        let mut stream = self.client.get_subdomains(request).await?.into_inner();
-        while let Some(result) = stream.message().await? {
-            debug!("crobat result {:?}", &result);
-            subdomains.push(result.domain);
-        }
-
-        Ok(subdomains)
+        Ok(stream)
     }
 }
