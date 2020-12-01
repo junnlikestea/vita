@@ -51,14 +51,12 @@ impl PostProcessor {
     /// If the the input domain contains any invalid characters the
     /// attempting to parse it into a `addr::DomainName` would return an error
     fn strip_invalid<T: AsRef<str> + std::fmt::Display>(domain: T) -> String {
-        let blacklisted = vec!["\"", "\\", "*"];
-        let mut cleaned = domain.to_string();
-
-        for c in blacklisted.iter() {
-            cleaned = cleaned.replace(c, "");
-        }
-
-        cleaned.strip_prefix('.').unwrap_or(&cleaned).to_lowercase()
+        domain
+            .as_ref()
+            .strip_prefix('.')
+            .unwrap_or(domain.as_ref())
+            .replace(&['"', '\"', '\\', '*'][..], "")
+            .to_lowercase()
     }
 
     /// Determines if the domain is a result we're interested in
