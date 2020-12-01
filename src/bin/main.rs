@@ -36,9 +36,9 @@ async fn main() -> Result<()> {
 
     let mut cleaner = PostProcessor::default();
     if matches.is_present("subs-only") {
-        cleaner.any_subdomain(&hosts);
+        cleaner.any_subdomain(hosts.clone());
     } else {
-        cleaner.any_root(&hosts);
+        cleaner.any_root(hosts.clone());
     }
 
     let mut runner = Runner::default()

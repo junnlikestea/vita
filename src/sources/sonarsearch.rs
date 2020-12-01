@@ -1,12 +1,12 @@
-use crate::error::Result;
-use crate::error::VitaError;
-use crate::DataSource;
+use crate::error::{Result, VitaError};
+use crate::{DataSource, QUEUE_SIZE};
 use async_trait::async_trait;
 use crobat::Crobat;
+use futures::StreamExt;
 use reqwest::Client;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tracing::{info, warn};
+use tracing::{debug, info};
 
 #[derive(Default, Clone)]
 pub struct SonarSearch {
@@ -22,16 +22,31 @@ impl SonarSearch {
 #[async_trait]
 impl DataSource for SonarSearch {
     async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
+        let mut results = Vec::with_capacity(QUEUE_SIZE);
         let mut client = Crobat::new().await;
-        let subdomains = client.get_subs(host.clone()).await?;
+        let mut subs = client.get_subs(host.clone()).await?;
 
-        if !subdomains.is_empty() {
-            info!("Discovered {} results for: {}", &subdomains.len(), &host);
-            let _ = tx.send(subdomains).await;
-            return Ok(());
+        while let Some(r) = subs.next().await {
+            let domain = r
+                .and_then(|d| Ok(d.domain))
+                .map_err(|_| VitaError::CrobatError)?;
+            results.push(domain);
+
+            if results.len() == QUEUE_SIZE {
+                debug!("sonarsearch queue is full, sending across channel",);
+                let mut tx = tx.clone();
+                tx.send(results.drain(..).collect()).await;
+            }
         }
 
-        warn!("no results for {} SonarSearch", &host);
+        if !results.is_empty() {
+            info!(
+                "draining {} remaining items from sonarsearch queue",
+                results.len()
+            );
+            tx.send(results.drain(..).collect()).await;
+        }
+
         Err(VitaError::SourceError("SonarSearch".into()))
     }
 }
@@ -42,7 +57,6 @@ mod tests {
     use matches::matches;
     use tokio::sync::mpsc::channel;
 
-    #[ignore]
     #[tokio::test]
     async fn returns_results() {
         let (tx, mut rx) = channel(1);
