@@ -21,9 +21,14 @@ jobs:
         run: mkdir artifacts
 
       - name: Get the release version from the tag
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: "true"
         if: env.VITA_VERSION == ''
         run: |
-          echo "VITA_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          # Apparently, this is the right way to get a tag name. Really?
+          #
+          # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "::set-env name=VITA_VERSION::${GITHUB_REF#refs/tags/}"
           echo "version is: ${{ env.VITA_VERSION }}"
 
       - name: Create GitHub release
@@ -61,6 +66,8 @@ jobs:
       TARGET_DIR: ./target
       # Emit backtraces on panics.
       RUST_BACKTRACE: 1
+      # Build static releases with PCRE2.
+      PCRE2_SYS_STATIC: 1
     strategy:
       matrix:
         build: [linux, macos, win-msvc, win-gnu, win32-msvc]
@@ -102,12 +109,16 @@ jobs:
         components: rustfmt
 
     - name: Use Cross
+      env:
+        ACTIONS_ALLOW_UNSECURE_COMMANDS: "true"
       # if: matrix.os != 'windows-2019'
       run: |
-        cargo install cross 
-        echo "CARGO=cross" >> $GITHUB_ENV
-        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
-        echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+        # FIXME: to work around bugs in latest cross release, install master.
+        # See: https://github.com/rust-embedded/cross/issues/357
+        cargo install --git https://github.com/rust-embedded/cross
+        echo "::set-env name=CARGO::cross"
+        echo "::set-env name=TARGET_FLAGS::--target ${{ matrix.target }}"
+        echo "::set-env name=TARGET_DIR::./target/${{ matrix.target }}"
 
     - name: Show command used for Cargo
       run: |
@@ -122,13 +133,15 @@ jobs:
         path: artifacts
 
     - name: Set release upload URL and release version
+      env:
+        ACTIONS_ALLOW_UNSECURE_COMMANDS: "true"
       shell: bash
       run: |
         release_upload_url="$(cat artifacts/release-upload-url)"
-        echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
+        echo "::set-env name=RELEASE_UPLOAD_URL::$release_upload_url"
         echo "release upload url: $RELEASE_UPLOAD_URL"
         release_version="$(cat artifacts/release-version)"
-        echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
+        echo "::set-env name=RELEASE_VERSION::$release_version"
         echo "release version: $RELEASE_VERSION"
 
     - name: Build release binary
@@ -139,6 +152,8 @@ jobs:
       run: strip "target/${{ matrix.target }}/release/vita"
 
     - name: Build archive
+      env:
+        ACTIONS_ALLOW_UNSECURE_COMMANDS: "true"
       shell: bash
       run: |
         staging="vita-${{ env.RELEASE_VERSION }}-${{ matrix.target }}"
@@ -147,11 +162,11 @@ jobs:
         if [ "${{ matrix.os }}" = "windows-2019" ]; then
           cp "target/${{ matrix.target }}/release/vita.exe" "$staging/"
           7z a "$staging.zip" "$staging"
-          echo "ASSET=$staging.zip" >> $GITHUB_ENV
+          echo "::set-env name=ASSET::$staging.zip"
         else
           cp "target/${{ matrix.target }}/release/vita" "$staging/"
           tar czf "$staging.tar.gz" "$staging"
-          echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
+          echo "::set-env name=ASSET::$staging.tar.gz"
         fi
 
     - name: Upload release archive
