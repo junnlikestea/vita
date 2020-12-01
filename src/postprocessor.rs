@@ -50,13 +50,15 @@ impl PostProcessor {
     /// Errors
     /// If the the input domain contains any invalid characters the
     /// attempting to parse it into a `addr::DomainName` would return an error
-    fn strip_invalid<T: Into<String>>(domain: T) -> String {
+    fn strip_invalid<T: AsRef<str> + std::fmt::Display>(domain: T) -> String {
         let blacklisted = vec!["\"", "\\", "*"];
-        // iter over the blacklisted chars and return a string that has been cleaned.
-        blacklisted.iter().fold(domain.into(), |mut res, c| {
-            res = res.replace(c, "");
-            res.strip_prefix('.').unwrap_or(&res).to_lowercase()
-        })
+        let mut cleaned = domain.to_string();
+
+        for c in blacklisted.iter() {
+            cleaned = cleaned.replace(c, "");
+        }
+
+        cleaned.strip_prefix('.').unwrap_or(&cleaned).to_lowercase()
     }
 
     /// Determines if the domain is a result we're interested in
@@ -68,10 +70,9 @@ impl PostProcessor {
     /// domains and a relevant result will be any that has the same suffix as one of the
     /// input domains.
     fn is_relevant<T: AsRef<str>>(&self, result: T) -> bool {
-        let cleaned_result = Self::strip_invalid(result.as_ref());
         match self.filter {
             Filter::RootOnly => {
-                if let Ok(d) = cleaned_result.parse::<DomainName>() {
+                if let Ok(d) = result.as_ref().parse::<DomainName>() {
                     self.roots.contains(d.root().to_str())
                 } else {
                     false
@@ -80,11 +81,12 @@ impl PostProcessor {
             Filter::SubOnly => self
                 .roots
                 .iter()
-                .any(|root| cleaned_result.ends_with(root) && !cleaned_result.eq(root)),
+                .any(|root| result.as_ref().ends_with(root) && !result.as_ref().eq(root)),
         }
     }
 }
 
+/// An iterator which uses `PostProcessor` to filter each `Iterator::Item`
 pub struct PostProcessorIter<'a, I>
 where
     I: Iterator,
@@ -98,12 +100,13 @@ where
     I: Iterator,
     I::Item: Hash + Eq + AsRef<str>,
 {
-    type Item = I::Item;
+    type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(d) = self.inner.next() {
-            if self.cleaner.is_relevant(d.as_ref()) {
-                return Some(d);
+            let cleaned = PostProcessor::strip_invalid(d.as_ref());
+            if self.cleaner.is_relevant(&cleaned) {
+                return Some(cleaned);
             }
         }
         None
