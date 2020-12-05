@@ -22,13 +22,14 @@ pub struct Crobat {
 }
 
 impl Crobat {
-    pub async fn new() -> Self {
+    pub async fn connect() -> Result<Self> {
         trace!("building crobat client");
         let addr = "https://crobat-rpc.omnisint.io";
-        let conn = Crobat::build_tls_client(addr).await.unwrap();
-
-        Self {
-            client: CrobatClient::new(conn),
+        match Crobat::build_tls_client(addr).await {
+            Ok(conn) => Ok(Self {
+                client: CrobatClient::new(conn),
+            }),
+            Err(e) => Err(e),
         }
     }
 

@@ -23,7 +23,7 @@ impl SonarSearch {
 impl DataSource for SonarSearch {
     async fn run(&self, host: Arc<String>, mut tx: Sender<Vec<String>>) -> Result<()> {
         let mut results = Vec::with_capacity(QUEUE_SIZE);
-        let mut client = Crobat::new().await;
+        let mut client = Crobat::connect().await?;
         let mut subs = client.get_subs(host.clone()).await?;
 
         while let Some(r) = subs.next().await {
