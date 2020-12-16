@@ -48,6 +48,7 @@ impl ParsedArgs {
         let matches = app.get_matches();
         // make it a hashset incase user provided duplicate domains
         let mut hosts: HashSet<String> = HashSet::new();
+        let mut excluded: Vec<&str> = Vec::new();
         let max_concurrent: usize = matches.value_of("concurrency").unwrap().parse()?;
         let timeout: u64 = matches.value_of("timeout").unwrap().parse()?;
 
@@ -68,6 +69,10 @@ impl ParsedArgs {
             hosts = read_input(None)?;
         }
 
+        if matches.is_present("exclude") {
+            excluded = matches.values_of("exclude").unwrap().collect();
+        }
+
         let mut cleaner = PostProcessor::default();
         if matches.is_present("subs-only") {
             cleaner.any_subdomain(hosts.clone());
@@ -78,17 +83,16 @@ impl ParsedArgs {
         let mut runner = Runner::default()
             .concurrency(max_concurrent)
             .timeout(timeout)
-            .free_sources();
+            .free_sources()
+            .exclude(&excluded);
         if matches.is_present("all_sources") {
-            runner = runner.all_sources();
+            runner = runner.all_sources().exclude(&excluded);
         }
-
-        let flush = matches.is_present("flush");
 
         Ok(Self {
             runner,
             cleaner,
-            flush,
+            flush: matches.is_present("flush"),
             hosts,
         })
     }
@@ -136,6 +140,14 @@ fn create_clap_app() -> clap::App<'static, 'static> {
                 .help("use sources which require an Api key")
                 .short("a")
                 .long("all"),
+        )
+        .arg(
+            Arg::with_name("exclude")
+                .help("Excludes sources from data collection")
+                .short("e")
+                .long("exclude")
+                .multiple(true)
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("subs-only")
