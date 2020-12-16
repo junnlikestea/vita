@@ -69,6 +69,13 @@ vita -d hackerone.com -a
 ``` 
 By default it will just ignore services you don't supply keys for.
 
+**Excluding sources**
+
+You can exclude sources with the `-e` flag
+```
+vita -d hackerone.com -e Wayback
+```
+
 If you would like some more verbose output you can use the `-v` flag. There are
 different levels of verbosity ranging from noisy to informational, most of the
 time I just use `info`. This is all printing to stderr, so it won't be captured
