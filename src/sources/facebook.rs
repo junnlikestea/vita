@@ -125,7 +125,6 @@ mod tests {
     use super::*;
     use crate::client;
     use matches::matches;
-    use std::time::Duration;
     use tokio::sync::mpsc::channel;
 
     // checks if we can fetch the credentials from an .env file.
